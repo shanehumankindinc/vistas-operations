@@ -2,42 +2,41 @@ import { getGuestyToken } from "@/lib/guesty";
 
 export const dynamic = "force-dynamic";
 
-// Debug-only: returns raw Guesty /reviews response for one market.
+// Debug: shows raw Guesty /reviews response and what the cron would extract.
 // ?market=branson|deep_creek|poconos  (default: branson)
+// ?skip=0  — page offset for pagination
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const market = searchParams.get("market") || "branson";
+  const skip = parseInt(searchParams.get("skip") || "0", 10);
 
   try {
     const token = await getGuestyToken(market);
-    const res = await fetch("https://open-api.guesty.com/v1/reviews?limit=2&skip=0", {
+    const res = await fetch(`https://open-api.guesty.com/v1/reviews?limit=3&skip=${skip}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const raw = await res.json();
+    const body = await res.json();
+    const rows = body?.data || body?.results || body || [];
 
-    // Return the raw response + a flattened view of score fields on first review
-    const first = raw?.data?.[0] || raw?.results?.[0] || raw?.[0] || null;
-    const analysis = first
-      ? {
-          topLevelKeys: Object.keys(first),
-          rawReviewKeys: first.rawReview ? Object.keys(first.rawReview) : "rawReview is null/missing",
-          scores: {
-            "r.overallScore":      first.overallScore,
-            "r.cleanliness":       first.cleanliness,
-            "raw.overallRating":   first.rawReview?.overallRating,
-            "raw.overallScore":    first.rawReview?.overallScore,
-            "raw.cleanliness":     first.rawReview?.cleanliness,
-            "raw.accuracy":        first.rawReview?.accuracy,
-            "raw.communication":   first.rawReview?.communication,
-            "raw.publicReview":    first.rawReview?.publicReview,
-            "raw.reviewText":      first.rawReview?.reviewText,
-            "r.reviewText":        first.reviewText,
-          },
-          firstReview: first,
-        }
-      : { error: "no reviews in response", raw };
+    const parsed = rows.map((r) => {
+      const raw = r.rawReview || {};
+      return {
+        review_id:    r._id,
+        channel:      r.channelId,
+        listing_id:   r.listingId,
+        rawReview_keys: Object.keys(raw),
+        rawReview_submitted: raw.submitted,
+        extracted: {
+          submitted_at:  (raw.submitted_at || raw.first_completed_at || r.createdAt || "").slice(0, 10),
+          overall_score: raw.overall_rating ?? null,
+          cleanliness:   raw.category_ratings_cleanliness ?? null,
+          accuracy:      raw.category_ratings_accuracy ?? null,
+          review_text:   raw.public_review ? raw.public_review.slice(0, 80) : null,
+        },
+      };
+    });
 
-    return Response.json({ market, status: res.status, analysis });
+    return Response.json({ market, skip, total_in_page: rows.length, parsed });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
