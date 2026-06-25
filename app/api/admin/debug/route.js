@@ -16,23 +16,31 @@ export async function GET(req) {
 
   const out = {};
 
-  // --- Breezeway: peek at first 2 properties ---
+  // --- Breezeway: state distribution across all properties ---
   try {
     const bzToken = await kv.get("breezeway:access_token");
     if (!bzToken) throw new Error("No BZ token in KV");
 
-    const bzRes = await fetch("https://api.breezeway.io/public/inventory/v1/property?limit=2&page=1", {
-      headers: { Authorization: `JWT ${bzToken}`, Accept: "application/json" },
-    });
-    const bzData = await bzRes.json();
-    out.breezeway_sample = {
-      status: bzRes.status,
-      type: Array.isArray(bzData) ? "array" : "object",
-      count: Array.isArray(bzData) ? bzData.length : bzData.count,
-      first_keys: (Array.isArray(bzData) ? bzData[0] : bzData.results?.[0]) ? Object.keys(Array.isArray(bzData) ? bzData[0] : bzData.results[0]) : [],
-      first: Array.isArray(bzData) ? bzData[0] : bzData.results?.[0],
-      market_ids: { branson: MARKETS.branson.bzIdentity, deep_creek: MARKETS.deep_creek.bzIdentity, poconos: MARKETS.poconos.bzIdentity },
-    };
+    // Fetch all pages to tally state codes
+    const stateCounts = {};
+    let page = 1;
+    let total = 0;
+    while (true) {
+      const bzRes = await fetch(`https://api.breezeway.io/public/inventory/v1/property?limit=100&page=${page}`, {
+        headers: { Authorization: `JWT ${bzToken}`, Accept: "application/json" },
+      });
+      const bzData = await bzRes.json();
+      const rows = Array.isArray(bzData) ? bzData : (bzData.results || []);
+      if (rows.length === 0) break;
+      rows.forEach((p) => {
+        const s = p.state || "null";
+        stateCounts[s] = (stateCounts[s] || 0) + 1;
+      });
+      total += rows.length;
+      if (rows.length < 100) break;
+      page++;
+    }
+    out.breezeway_state_distribution = { total, stateCounts };
   } catch (e) {
     out.breezeway_error = e.message;
   }
