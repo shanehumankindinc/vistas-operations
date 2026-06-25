@@ -1,15 +1,15 @@
 import { getSupabase } from "@/lib/db";
-import { fetchAllBzProperties, fetchBzTasksForProperty } from "@/lib/breezeway";
+import { fetchAllBzPropertiesForMarket, fetchBzTasksForProperty } from "@/lib/breezeway";
 import { MARKET_KEYS, isExcludedVendor } from "@/lib/markets";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 // Runs at 5am UTC daily.
-// Fetches all Breezeway properties once, then maps each to a market using
-// reference_external_property_id → Guesty listing ID → market from Supabase.
-// This is definitive: no state-code guessing, no company_id mismatches.
-// Tasks are fetched per-property in batches of 10.
+// Each market has its own Breezeway account — fetched independently using per-market tokens.
+// Branson: token from KV (seeded by branson-dashboard revenue-pipeline cron).
+// Deep Creek / Poconos: tokens fetched via OAuth2 using Vercel env var credentials,
+//   then cached in KV for 23h (BREEZEWAY_CLIENT_ID_DEEPCREEK / BREEZEWAY_CLIENT_SECRET_DEEPCREEK etc.)
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -23,7 +23,8 @@ export async function GET(req) {
   const toDate = today.toISOString().slice(0, 10);
   const fromStr = fromDate.toISOString().slice(0, 10);
 
-  // Build Guesty listing ID → market lookup from Supabase
+  // Build Guesty listing ID → market lookup (used to verify cross-market integrity for Branson;
+  // DC and Poconos properties are all already in the right account).
   const { data: guestyProps, error: gpErr } = await supabase
     .from("guesty_properties")
     .select("id, market");
@@ -32,33 +33,27 @@ export async function GET(req) {
   const listingToMarket = {};
   (guestyProps || []).forEach((p) => { listingToMarket[p.id] = p.market; });
 
-  // Fetch all Breezeway properties (no filtering — one full paginated fetch)
-  const allBzProps = await fetchAllBzProperties();
-
-  // Group BZ properties by market using the Guesty cross-reference
-  const propsByMarket = {};
-  MARKET_KEYS.forEach((m) => { propsByMarket[m] = []; });
-
-  for (const prop of allBzProps) {
-    const guestyId = prop.reference_external_property_id;
-    const market = guestyId ? listingToMarket[guestyId] : null;
-    if (market && propsByMarket[market]) {
-      propsByMarket[market].push(prop);
-    }
-  }
-
   const results = {};
 
   for (const market of MARKET_KEYS) {
     try {
-      const properties = propsByMarket[market];
+      // Fetch all properties from this market's Breezeway account
+      const bzProps = await fetchAllBzPropertiesForMarket(market);
+
+      // For Branson, cross-check against Guesty to filter to only managed properties.
+      // For DC/Poconos, every property in their BZ account belongs to that market.
+      const properties = market === "branson"
+        ? bzProps.filter((p) => {
+            const guestyId = p.reference_external_property_id;
+            return guestyId ? listingToMarket[guestyId] === "branson" : false;
+          })
+        : bzProps;
+
       let upserted = 0;
       let errors = 0;
-
-      // Fetch tasks per property in batches of 10
-      const BATCH = 10;
       const allRows = [];
 
+      const BATCH = 10;
       for (let i = 0; i < properties.length; i += BATCH) {
         const batch = properties.slice(i, i + BATCH);
         const batchResults = await Promise.all(
@@ -67,7 +62,7 @@ export async function GET(req) {
             const propName = prop.name || prop.display || String(prop.id);
             if (!bzId) return [];
             try {
-              return await fetchBzTasksForProperty(bzId, propName, fromStr, toDate);
+              return await fetchBzTasksForProperty(bzId, propName, fromStr, toDate, market);
             } catch (e) {
               if (!e.message.includes("422") && !e.message.includes("404")) {
                 errors++;
@@ -79,7 +74,7 @@ export async function GET(req) {
         allRows.push(...batchResults.flat());
       }
 
-      // Upsert to Supabase
+      // Build rows for upsert
       const rows = [];
       for (const t of allRows) {
         const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
@@ -115,7 +110,8 @@ export async function GET(req) {
       }
 
       results[market] = {
-        properties: properties.length,
+        bz_props_in_account: bzProps.length,
+        properties_used: properties.length,
         tasks_fetched: allRows.length,
         upserted,
         property_errors: errors,
@@ -125,5 +121,5 @@ export async function GET(req) {
     }
   }
 
-  return Response.json({ ok: true, results, total_bz_props: allBzProps.length });
+  return Response.json({ ok: true, results });
 }
