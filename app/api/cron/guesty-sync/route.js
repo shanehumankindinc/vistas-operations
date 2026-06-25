@@ -22,29 +22,54 @@ export async function GET(req) {
     const cfg = MARKETS[market];
     const marketResult = { reviews: 0, properties: 0, owners: 0, refunds: 0, errors: [] };
 
-    // --- REVIEWS ---
+    // Fetch listings and reviews in parallel — listings are needed for both
+    // the properties write and the review property_name enrichment.
+    let listings = [];
+    let reviews = [];
     try {
-      const reviews = await fetchAllReviews(market);
-      // Response shape: { data: [...], limit, skip }
-      // Review object: { _id, channelId, listingId, reservationId, createdAt, rawReview, ... }
-      // Scores live inside rawReview (channel-specific sub-object)
+      [listings, reviews] = await Promise.all([
+        fetchAllListings(market),
+        fetchAllReviews(market),
+      ]);
+    } catch (err) {
+      marketResult.errors.push(`fetch: ${err.message}`);
+      results[market] = marketResult;
+      continue;
+    }
+
+    // Build listing_id → nickname map for property_name enrichment on reviews
+    const listingMap = {};
+    for (const l of listings) {
+      if (l._id && l.nickname) listingMap[l._id] = l.nickname;
+    }
+
+    // --- REVIEWS ---
+    // Guesty Open API /v1/reviews structure (confirmed 2026-06-25):
+    //   root: _id, listingId, channelId, createdAt, rawReview
+    //   rawReview keys: overall_rating, public_review, reviewee_response,
+    //     submitted_at, first_completed_at,
+    //     category_ratings_cleanliness, category_ratings_accuracy,
+    //     category_ratings_checkin, category_ratings_communication,
+    //     category_ratings_location, category_ratings_value
+    try {
       const rows = reviews.map((r) => {
         const raw = r.rawReview || {};
         return {
           review_id:        r._id,
           market,
-          submitted_at:     (r.createdAt || r.submittedAt || "").slice(0, 10) || null,
-          channel:          r.channelId || r.channel || null,
+          submitted_at:     (raw.submitted_at || raw.first_completed_at || r.createdAt || "").slice(0, 10) || null,
+          channel:          r.channelId || null,
           listing_id:       r.listingId || null,
-          overall_score:    raw.overallRating ?? raw.overallScore ?? r.overallScore ?? null,
-          cleanliness:      raw.cleanliness ?? r.cleanliness ?? null,
-          accuracy:         raw.accuracy ?? r.accuracy ?? null,
-          checkin_score:    raw.checkin ?? raw.checkIn ?? r.checkin ?? null,
-          communication:    raw.communication ?? r.communication ?? null,
-          location:         raw.location ?? r.location ?? null,
-          value:            raw.value ?? r.value ?? null,
-          review_text:      raw.publicReview || raw.reviewText || r.reviewText || null,
-          private_feedback: raw.privateFeedback || raw.privateNotes || r.privateFeedback || null,
+          property_name:    r.listingId ? (listingMap[r.listingId] || null) : null,
+          overall_score:    raw.overall_rating ?? null,
+          cleanliness:      raw.category_ratings_cleanliness ?? null,
+          accuracy:         raw.category_ratings_accuracy ?? null,
+          checkin_score:    raw.category_ratings_checkin ?? null,
+          communication:    raw.category_ratings_communication ?? null,
+          location:         raw.category_ratings_location ?? null,
+          value:            raw.category_ratings_value ?? null,
+          review_text:      raw.public_review || null,
+          private_feedback: raw.reviewee_response || null,
           pulled_at:        new Date().toISOString(),
         };
       });
@@ -61,10 +86,7 @@ export async function GET(req) {
     }
 
     // --- PROPERTIES ---
-    // Store listings so we can extract owner IDs without a second API call.
-    let listings = [];
     try {
-      listings = await fetchAllListings(market);
       const rows = listings.map((l) => ({
         id:            l._id,
         market,
