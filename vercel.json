@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/breezeway-tasks",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/guesty-sync",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/checkins",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}
