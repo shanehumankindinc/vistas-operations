@@ -22,7 +22,7 @@ export async function GET(req) {
   const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
   const supabase = getSupabase();
 
-  const [tasksRes, reviewsRes, refundsRes, checkInsRes] = await Promise.all([
+  const [tasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes] = await Promise.all([
     supabase
       .from("breezeway_tasks")
       .select("*")
@@ -48,11 +48,27 @@ export async function GET(req) {
       .in("market", markets)
       .gte("check_in_date", fromDate)
       .lte("check_in_date", toDate),
+
+    supabase
+      .from("guesty_properties")
+      .select("id, nickname")
+      .in("market", markets),
   ]);
 
   if (tasksRes.error) return Response.json({ error: tasksRes.error.message }, { status: 500 });
 
-  const tasks = (tasksRes.data || []).filter((t) => !isExcludedVendor(t.vendor_name));
+  // Build nickname → listing_id map for review/checkin matching
+  const nicknameToListingId = {};
+  for (const p of propertiesRes.data || []) {
+    if (p.nickname && p.id) nicknameToListingId[p.nickname.toLowerCase().trim()] = p.id;
+  }
+
+  const rawTasks = (tasksRes.data || []).filter((t) => !isExcludedVendor(t.vendor_name));
+  // Enrich tasks with listing_id so scorecard can match to reviews and checkins
+  const tasks = rawTasks.map((t) => ({
+    ...t,
+    listing_id: t.listing_id || (t.property_name ? nicknameToListingId[t.property_name.toLowerCase().trim()] : null) || null,
+  }));
   const reviews = reviewsRes.data || [];
   const refunds = refundsRes.data || [];
   const checkIns = checkInsRes.data || [];
