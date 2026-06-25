@@ -15,28 +15,14 @@ const RANGES = [
   { label: "90 days", days: 90 },
 ];
 
-function fmt(n: number | null, decimals = 1) {
-  if (n == null) return "—";
-  return n.toFixed(decimals);
-}
-
 function pct(n: number | null) {
   if (n == null) return "—";
   return (n * 100).toFixed(0) + "%";
 }
 
-function rateColor(rate: number | null) {
-  if (rate == null) return "text-zinc-400";
-  if (rate >= 0.9) return "text-emerald-600 font-semibold";
-  if (rate >= 0.75) return "text-yellow-600 font-semibold";
-  return "text-red-600 font-semibold";
-}
-
-function scoreColor(score: number | null) {
-  if (score == null) return "text-zinc-400";
-  if (score >= 4.7) return "text-emerald-600 font-semibold";
-  if (score >= 4.3) return "text-yellow-600 font-semibold";
-  return "text-red-600 font-semibold";
+function fmt(n: number | null, decimals = 2) {
+  if (n == null) return "—";
+  return n.toFixed(decimals);
 }
 
 function fmtTime(mins: number | null) {
@@ -59,6 +45,7 @@ type Row = {
   refund_amount: number;
   property_count: number;
   median_time: number | null;
+  properties?: string[];
 };
 
 type Meta = {
@@ -70,6 +57,8 @@ type Meta = {
   markets: string[];
 };
 
+type SortKey = keyof Row;
+
 export default function Dashboard() {
   const [market, setMarket] = useState("all");
   const [rangeDays, setRangeDays] = useState(90);
@@ -77,7 +66,7 @@ export default function Dashboard() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<keyof Row>("on_time_rate");
+  const [sortKey, setSortKey] = useState<SortKey>("on_time_rate");
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -104,28 +93,61 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, [load]);
 
-  function handleSort(key: keyof Row) {
+  function handleSort(key: SortKey) {
     if (sortKey === key) setSortAsc(!sortAsc);
     else { setSortKey(key); setSortAsc(false); }
   }
 
   const sorted = [...rows].sort((a, b) => {
-    const av = a[sortKey] ?? -Infinity;
-    const bv = b[sortKey] ?? -Infinity;
+    const av = a[sortKey] ?? (sortAsc ? Infinity : -Infinity);
+    const bv = b[sortKey] ?? (sortAsc ? Infinity : -Infinity);
     if (typeof av === "string" && typeof bv === "string") {
       return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
     }
     return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
   });
 
-  function Th({ k, label }: { k: keyof Row; label: string }) {
+  function statusDot(rate: number | null) {
+    if (rate == null) return <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#6b7280", display: "inline-block" }} />;
+    if (rate >= 0.9) return <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />;
+    if (rate >= 0.75) return <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} />;
+    return <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", display: "inline-block" }} />;
+  }
+
+  function rateStyle(rate: number | null): React.CSSProperties {
+    if (rate == null) return { color: "#6b7280" };
+    if (rate >= 0.9) return { color: "#16a34a", fontWeight: 600 };
+    if (rate >= 0.75) return { color: "#d97706", fontWeight: 600 };
+    return { color: "#dc2626", fontWeight: 600 };
+  }
+
+  function scoreStyle(score: number | null): React.CSSProperties {
+    if (score == null) return { color: "#6b7280" };
+    if (score >= 4.7) return { color: "#16a34a", fontWeight: 600 };
+    if (score >= 4.3) return { color: "#d97706", fontWeight: 600 };
+    return { color: "#dc2626", fontWeight: 600 };
+  }
+
+  function Th({ k, label, right = true }: { k: SortKey; label: string; right?: boolean }) {
     const active = sortKey === k;
     return (
       <th
         onClick={() => handleSort(k)}
-        className="px-3 py-2 text-right text-xs font-semibold text-zinc-500 uppercase tracking-wide cursor-pointer select-none hover:text-zinc-900 whitespace-nowrap"
+        style={{
+          padding: "10px 14px",
+          textAlign: right ? "right" : "left",
+          fontSize: 11,
+          fontWeight: 600,
+          color: active ? "#ffffff" : "#94a3b8",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          userSelect: "none",
+          background: "transparent",
+        }}
       >
-        {label} {active ? (sortAsc ? "↑" : "↓") : ""}
+        {label}{active ? (sortAsc ? " ↑" : " ↓") : ""}
       </th>
     );
   }
@@ -134,113 +156,145 @@ export default function Dashboard() {
     ? new Date(meta.lastSynced).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
-  return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      {/* Header */}
-      <div className="bg-white border-b border-zinc-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Vistas Operations</h1>
-            <p className="text-sm text-zinc-500 mt-0.5">Cleaner scorecard — all markets</p>
-          </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Market tabs */}
-            <div className="flex rounded-lg border border-zinc-200 overflow-hidden text-sm">
-              {MARKETS.map((m) => (
-                <button
-                  key={m.key}
-                  onClick={() => setMarket(m.key)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${
-                    market === m.key
-                      ? "bg-zinc-900 text-white"
-                      : "bg-white text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-            {/* Range tabs */}
-            <div className="flex rounded-lg border border-zinc-200 overflow-hidden text-sm">
-              {RANGES.map((r) => (
-                <button
-                  key={r.days}
-                  onClick={() => setRangeDays(r.days)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${
-                    rangeDays === r.days
-                      ? "bg-zinc-900 text-white"
-                      : "bg-white text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={load}
-              className="px-3 py-1.5 rounded-lg border border-zinc-200 text-sm font-medium hover:bg-zinc-100 transition-colors"
-            >
-              ↻ Refresh
-            </button>
-          </div>
-        </div>
-      </div>
+  // Summary KPIs
+  const avgOnTime = rows.length > 0
+    ? rows.filter(r => r.on_time_rate != null).reduce((s, r) => s + (r.on_time_rate ?? 0), 0) / rows.filter(r => r.on_time_rate != null).length
+    : null;
+  const avgScore = rows.length > 0
+    ? rows.filter(r => r.cleanliness_score != null).reduce((s, r) => s + (r.cleanliness_score ?? 0), 0) / rows.filter(r => r.cleanliness_score != null).length
+    : null;
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+  return (
+    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      {/* Top nav */}
+      <nav style={{ background: "#0f172a", borderBottom: "1px solid #1e293b", padding: "0 24px", display: "flex", alignItems: "center", gap: 0, height: 48 }}>
+        <span style={{ color: "#94a3b8", fontWeight: 600, fontSize: 15, marginRight: 24, letterSpacing: "-0.01em" }}>
+          <span style={{ color: "#ffffff" }}>Vistas</span> Ops
+        </span>
+        {MARKETS.map((m) => (
+          <button
+            key={m.key}
+            onClick={() => setMarket(m.key)}
+            style={{
+              padding: "0 16px",
+              height: 48,
+              border: "none",
+              borderBottom: market === m.key ? "2px solid #ffffff" : "2px solid transparent",
+              background: "transparent",
+              color: market === m.key ? "#ffffff" : "#64748b",
+              fontSize: 13,
+              fontWeight: market === m.key ? 600 : 400,
+              cursor: "pointer",
+              letterSpacing: "0.01em",
+              transition: "color 0.15s",
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 4 }}>
+          {RANGES.map((r) => (
+            <button
+              key={r.days}
+              onClick={() => setRangeDays(r.days)}
+              style={{
+                padding: "4px 12px",
+                border: "1px solid",
+                borderColor: rangeDays === r.days ? "#ffffff" : "#334155",
+                borderRadius: 6,
+                background: rangeDays === r.days ? "#ffffff" : "transparent",
+                color: rangeDays === r.days ? "#0f172a" : "#64748b",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              {r.label}
+            </button>
+          ))}
+          <button
+            onClick={load}
+            style={{ padding: "4px 10px", border: "1px solid #334155", borderRadius: 6, background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer", marginLeft: 4 }}
+          >
+            ↻
+          </button>
+        </div>
+      </nav>
+
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "24px 24px" }}>
+        {/* KPI row */}
+        {!loading && rows.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
+            {[
+              { label: "Cleaners", value: rows.length, format: (v: number) => String(v) },
+              { label: "Total Cleans", value: rows.reduce((s, r) => s + r.total_cleans, 0), format: (v: number) => v.toLocaleString() },
+              { label: "Avg On-time", value: avgOnTime, format: (v: number | null) => pct(v) },
+              { label: "Avg Cleanliness", value: avgScore, format: (v: number | null) => fmt(v) },
+              { label: "Total Reviews", value: rows.reduce((s, r) => s + r.review_count, 0), format: (v: number) => String(v) },
+              { label: "Properties", value: rows.reduce((s, r) => s + r.property_count, 0), format: (v: number) => String(v) },
+            ].map(({ label, value, format }) => (
+              <div key={label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 18px" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+                <div style={{ fontSize: 24, fontWeight: 600, color: "#0f172a", lineHeight: 1 }}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(format as (v: any) => string)(value)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Meta bar */}
         {meta && !loading && (
-          <div className="flex flex-wrap gap-4 mb-4 text-sm text-zinc-500">
-            <span>{meta.fromDate} → {meta.toDate}</span>
+          <div style={{ display: "flex", gap: 12, marginBottom: 12, fontSize: 12, color: "#94a3b8", flexWrap: "wrap", alignItems: "center" }}>
+            <span>Unit data scraped {meta.fromDate} → {meta.toDate}</span>
             <span>·</span>
             <span>{meta.taskCount.toLocaleString()} tasks</span>
             <span>·</span>
             <span>{meta.reviewCount} reviews</span>
-            {lastSyncedStr && (
-              <>
-                <span>·</span>
-                <span>Last synced {lastSyncedStr}</span>
-              </>
-            )}
-            {rows.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{rows.length} cleaners</span>
-              </>
-            )}
+            {lastSyncedStr && <><span>·</span><span>Last synced {lastSyncedStr}</span></>}
           </div>
         )}
 
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+          <div style={{ marginBottom: 16, padding: "12px 16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>
+            {error}
+          </div>
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-24 text-zinc-400 text-sm">Loading…</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#94a3b8", fontSize: 14 }}>
+            Loading…
+          </div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-2">
-            <p className="text-zinc-500 text-sm">No cleaner data for this range.</p>
-            <p className="text-zinc-400 text-xs">Run the breezeway-tasks cron to populate data.</p>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 8 }}>
+            <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>No cleaner data for this range.</p>
+            <p style={{ color: "#94a3b8", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-zinc-100 bg-zinc-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                      Cleaner
+          <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#0f172a" }}>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                      Unit
                     </th>
                     <Th k="total_cleans" label="Cleans" />
-                    <Th k="on_time_rate" label="On-time" />
-                    <Th k="tasks_overdue" label="Overdue" />
+                    <Th k="on_time_rate" label="On-time %" />
                     <Th k="cleanliness_score" label="Cleanliness" />
                     <Th k="review_count" label="Reviews" />
                     <Th k="median_time" label="Median time" />
+                    <Th k="tasks_overdue" label="Overdue" />
                     <Th k="refund_count" label="Refunds" />
                     <Th k="property_count" label="Props" />
+                    <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                      Status
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody>
                   {sorted.map((row) => {
                     const isExpanded = expandedRow === row.vendor_name;
                     return (
@@ -248,36 +302,51 @@ export default function Dashboard() {
                         <tr
                           key={row.vendor_name}
                           onClick={() => setExpandedRow(isExpanded ? null : row.vendor_name)}
-                          className="hover:bg-zinc-50 cursor-pointer transition-colors"
+                          style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer", background: isExpanded ? "#f8fafc" : "#ffffff" }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
+                          onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? "#f8fafc" : "#ffffff")}
                         >
-                          <td className="px-4 py-3 font-medium text-zinc-900">{row.vendor_name}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{row.total_cleans}</td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${rateColor(row.on_time_rate)}`}>
+                          <td style={{ padding: "12px 14px" }}>
+                            <div style={{ fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{row.vendor_name}</div>
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                            {row.total_cleans}
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", ...rateStyle(row.on_time_rate) }}>
                             {pct(row.on_time_rate)}
-                            <span className="text-zinc-400 font-normal text-xs ml-1">
-                              ({row.on_time}/{row.decided})
+                            <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>
+                              {row.on_time}/{row.decided}
                             </span>
                           </td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${row.tasks_overdue > 0 ? "text-red-600 font-semibold" : "text-zinc-400"}`}>
-                            {row.tasks_overdue || "—"}
-                          </td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${scoreColor(row.cleanliness_score)}`}>
+                          <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", ...scoreStyle(row.cleanliness_score) }}>
                             {fmt(row.cleanliness_score)}
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-500">{row.review_count || "—"}</td>
-                          <td className="px-3 py-3 text-right text-zinc-500">{fmtTime(row.median_time)}</td>
-                          <td className={`px-3 py-3 text-right tabular-nums ${row.refund_count > 0 ? "text-red-600 font-semibold" : "text-zinc-400"}`}>
+                          <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280", fontVariantNumeric: "tabular-nums" }}>
+                            {row.review_count || "—"}
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>
+                            {fmtTime(row.median_time)}
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: row.tasks_overdue > 0 ? "#dc2626" : "#6b7280", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>
+                            {row.tasks_overdue || "—"}
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: row.refund_count > 0 ? "#dc2626" : "#6b7280", fontWeight: row.refund_count > 0 ? 600 : 400 }}>
                             {row.refund_count || "—"}
                           </td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-500">{row.property_count}</td>
+                          <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>
+                            {row.property_count}
+                          </td>
+                          <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                            {statusDot(row.on_time_rate)}
+                          </td>
                         </tr>
                         {isExpanded && (
-                          <tr key={`${row.vendor_name}-detail`} className="bg-zinc-50">
-                            <td colSpan={9} className="px-4 py-3">
-                              <div className="text-xs text-zinc-500 font-medium mb-1">Properties</div>
-                              <div className="flex flex-wrap gap-1">
-                                {((row as unknown as { properties: string[] }).properties || []).map((p: string) => (
-                                  <span key={p} className="px-2 py-0.5 bg-white border border-zinc-200 rounded text-xs text-zinc-700">
+                          <tr key={`${row.vendor_name}-detail`} style={{ background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+                            <td colSpan={10} style={{ padding: "10px 14px 14px 14px" }}>
+                              <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Properties</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {(row.properties || []).map((p: string) => (
+                                  <span key={p} style={{ padding: "3px 10px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, color: "#374151" }}>
                                     {p}
                                   </span>
                                 ))}
