@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/db";
-import { fetchAllListings, fetchAllReviews, fetchAllOwners, fetchReservationsByCheckIn } from "@/lib/guesty";
+import { fetchAllListings, fetchAllReviews, fetchOwnersByIds, fetchReservationsByCheckIn } from "@/lib/guesty";
 import { MARKET_KEYS, MARKETS } from "@/lib/markets";
 
 export const maxDuration = 300;
@@ -55,8 +55,10 @@ export async function GET(req) {
     }
 
     // --- PROPERTIES ---
+    // Store listings so we can extract owner IDs without a second API call.
+    let listings = [];
     try {
-      const listings = await fetchAllListings(market);
+      listings = await fetchAllListings(market);
       const rows = listings.map((l) => ({
         id:            l._id,
         market,
@@ -83,8 +85,11 @@ export async function GET(req) {
     }
 
     // --- OWNERS ---
+    // Extract unique owner IDs from the listings we already fetched.
+    // Never paginate /v1/owners directly — it returns 18k+ records and hits 429.
     try {
-      const owners = await fetchAllOwners(market);
+      const ownerIds = listings.flatMap((l) => l.owners || []).filter(Boolean);
+      const owners = await fetchOwnersByIds(market, ownerIds);
       const rows = owners.map((o) => ({
         id:          o._id,
         market,
