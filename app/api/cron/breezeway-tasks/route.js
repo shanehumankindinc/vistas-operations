@@ -1,14 +1,15 @@
 import { getSupabase } from "@/lib/db";
-import { fetchBzProperties, fetchBzTasksForProperty } from "@/lib/breezeway";
+import { fetchAllBzProperties, fetchBzTasksForProperty } from "@/lib/breezeway";
 import { MARKET_KEYS, isExcludedVendor } from "@/lib/markets";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 // Runs at 5am UTC daily.
-// Per market: fetches all Breezeway properties, then tasks per property
-// in parallel batches of 10 (same pattern as branson-dashboard).
-// 90-day window keeps scorecard history lean.
+// Fetches all Breezeway properties once, then maps each to a market using
+// reference_external_property_id → Guesty listing ID → market from Supabase.
+// This is definitive: no state-code guessing, no company_id mismatches.
+// Tasks are fetched per-property in batches of 10.
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -22,16 +23,39 @@ export async function GET(req) {
   const toDate = today.toISOString().slice(0, 10);
   const fromStr = fromDate.toISOString().slice(0, 10);
 
+  // Build Guesty listing ID → market lookup from Supabase
+  const { data: guestyProps, error: gpErr } = await supabase
+    .from("guesty_properties")
+    .select("id, market");
+  if (gpErr) return Response.json({ error: `guesty_properties lookup failed: ${gpErr.message}` }, { status: 500 });
+
+  const listingToMarket = {};
+  (guestyProps || []).forEach((p) => { listingToMarket[p.id] = p.market; });
+
+  // Fetch all Breezeway properties (no filtering — one full paginated fetch)
+  const allBzProps = await fetchAllBzProperties();
+
+  // Group BZ properties by market using the Guesty cross-reference
+  const propsByMarket = {};
+  MARKET_KEYS.forEach((m) => { propsByMarket[m] = []; });
+
+  for (const prop of allBzProps) {
+    const guestyId = prop.reference_external_property_id;
+    const market = guestyId ? listingToMarket[guestyId] : null;
+    if (market && propsByMarket[market]) {
+      propsByMarket[market].push(prop);
+    }
+  }
+
   const results = {};
 
   for (const market of MARKET_KEYS) {
     try {
-      // Step 1: get all properties for this market
-      const properties = await fetchBzProperties(market);
+      const properties = propsByMarket[market];
       let upserted = 0;
       let errors = 0;
 
-      // Step 2: fetch tasks per property in batches of 10
+      // Fetch tasks per property in batches of 10
       const BATCH = 10;
       const allRows = [];
 
@@ -45,7 +69,6 @@ export async function GET(req) {
             try {
               return await fetchBzTasksForProperty(bzId, propName, fromStr, toDate);
             } catch (e) {
-              // 422/404 on a single property are non-fatal
               if (!e.message.includes("422") && !e.message.includes("404")) {
                 errors++;
               }
@@ -56,7 +79,7 @@ export async function GET(req) {
         allRows.push(...batchResults.flat());
       }
 
-      // Step 3: upsert to Supabase
+      // Upsert to Supabase
       const rows = [];
       for (const t of allRows) {
         const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
@@ -81,7 +104,6 @@ export async function GET(req) {
       }
 
       if (rows.length > 0) {
-        // Upsert in chunks of 500 to avoid payload limits
         for (let i = 0; i < rows.length; i += 500) {
           const chunk = rows.slice(i, i + 500);
           const { error } = await supabase
@@ -103,5 +125,5 @@ export async function GET(req) {
     }
   }
 
-  return Response.json({ ok: true, results });
+  return Response.json({ ok: true, results, total_bz_props: allBzProps.length });
 }
