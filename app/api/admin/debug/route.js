@@ -42,30 +42,40 @@ export async function GET(req) {
     const gToken = await kv.get(MARKETS.branson.kvKey);
     if (!gToken) throw new Error("No Guesty token in KV for branson");
 
-    const [revRes, listRes] = await Promise.all([
+    const [revRes, listRes, listFullRes] = await Promise.all([
       fetch("https://open-api.guesty.com/v1/reviews?limit=1&skip=0", {
         headers: { Authorization: `Bearer ${gToken}` },
       }),
       fetch("https://open-api.guesty.com/v1/listings?limit=1&skip=0&fields=_id,nickname,owners", {
         headers: { Authorization: `Bearer ${gToken}` },
       }),
+      // Fetch without fields filter to see ALL available fields
+      fetch("https://open-api.guesty.com/v1/listings?limit=1&skip=0", {
+        headers: { Authorization: `Bearer ${gToken}` },
+      }),
     ]);
 
     const revData = await revRes.json();
     const listData = await listRes.json();
+    const listFullData = await listFullRes.json();
 
     out.guesty_reviews_sample = {
       status: revRes.status,
       top_keys: revData ? Object.keys(revData) : [],
-      count: revData.count,
-      first_result_keys: revData.results?.[0] ? Object.keys(revData.results[0]) : [],
-      first: revData.results?.[0],
+      // Check both common patterns
+      data_key: revData.data ? `array[${revData.data.length}]` : "missing",
+      results_key: revData.results ? `array[${revData.results.length}]` : "missing",
+      first_via_data: revData.data?.[0] ? Object.keys(revData.data[0]) : [],
     };
-    out.guesty_listing_sample = {
+    out.guesty_listing_with_fields = {
       status: listRes.status,
-      count: listData.count,
-      first: listData.results?.[0],
-      owners_field_type: listData.results?.[0]?.owners ? typeof listData.results[0].owners : "missing",
+      first_keys: listData.results?.[0] ? Object.keys(listData.results[0]) : [],
+    };
+    out.guesty_listing_full_keys = {
+      status: listFullRes.status,
+      first_keys: listFullData.results?.[0] ? Object.keys(listFullData.results[0]) : [],
+      owners_field: listFullData.results?.[0]?.owners,
+      ownerIds_field: listFullData.results?.[0]?.ownerIds,
     };
   } catch (e) {
     out.guesty_error = e.message;
