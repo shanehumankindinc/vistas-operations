@@ -1,11 +1,11 @@
-import { sql } from "@vercel/postgres";
+import { getSupabase } from "@/lib/db";
 import { MARKET_KEYS } from "@/lib/markets";
-import { buildScorecardData } from "@/lib/scorecard";
 import { isExcludedVendor } from "@/lib/markets";
+import { buildScorecardData } from "@/lib/scorecard";
 
 export const dynamic = "force-dynamic";
 
-// Returns scorecard data for a given market (or all markets) + date range.
+// Returns scorecard data for a given market (or all) + date range.
 // Query params:
 //   market  = branson | deep_creek | poconos | all  (default: all)
 //   from    = YYYY-MM-DD  (default: 90 days ago)
@@ -20,60 +20,54 @@ export async function GET(req) {
   const toDate = searchParams.get("to") || today;
 
   const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
+  const supabase = getSupabase();
 
   const [tasksRes, reviewsRes, refundsRes, checkInsRes] = await Promise.all([
-    sql`
-      SELECT * FROM breezeway_tasks
-      WHERE market = ANY(${markets})
-        AND scheduled_date >= ${fromDate}
-        AND scheduled_date <= ${toDate}
-      ORDER BY scheduled_date DESC
-    `,
-    sql`
-      SELECT * FROM guesty_reviews
-      WHERE market = ANY(${markets})
-        AND submitted_at >= ${fromDate}
-      ORDER BY submitted_at DESC
-    `,
-    sql`
-      SELECT * FROM guesty_refunds
-      WHERE market = ANY(${markets})
-        AND check_in >= ${fromDate}
-    `,
-    sql`
-      SELECT listing_id, check_in_date FROM guesty_checkins
-      WHERE market = ANY(${markets})
-        AND check_in_date >= ${fromDate}
-        AND check_in_date <= ${toDate}
-    `,
+    supabase
+      .from("breezeway_tasks")
+      .select("*")
+      .in("market", markets)
+      .gte("scheduled_date", fromDate)
+      .lte("scheduled_date", toDate),
+
+    supabase
+      .from("guesty_reviews")
+      .select("*")
+      .in("market", markets)
+      .gte("submitted_at", fromDate),
+
+    supabase
+      .from("guesty_refunds")
+      .select("*")
+      .in("market", markets)
+      .gte("check_in", fromDate),
+
+    supabase
+      .from("guesty_checkins")
+      .select("listing_id, check_in_date")
+      .in("market", markets)
+      .gte("check_in_date", fromDate)
+      .lte("check_in_date", toDate),
   ]);
 
-  const tasks = tasksRes.rows.filter((t) => !isExcludedVendor(t.vendor_name));
-  const reviews = reviewsRes.rows;
-  const refunds = refundsRes.rows;
-  const checkIns = checkInsRes.rows;
+  if (tasksRes.error) return Response.json({ error: tasksRes.error.message }, { status: 500 });
 
-  // Build scorecard per market then merge
-  const allScorecard = buildScorecardData({
-    tasks,
-    reviews,
-    refunds,
-    checkIns,
-    startDate: fromDate,
-    endDate: toDate,
-  });
+  const tasks = (tasksRes.data || []).filter((t) => !isExcludedVendor(t.vendor_name));
+  const reviews = reviewsRes.data || [];
+  const refunds = refundsRes.data || [];
+  const checkIns = checkInsRes.data || [];
 
-  // Determine data freshness
-  const pulledDates = tasksRes.rows.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
-  const lastSynced = pulledDates[0] || null;
+  const scorecard = buildScorecardData({ tasks, reviews, refunds, checkIns, startDate: fromDate, endDate: toDate });
+
+  const pulledDates = (tasksRes.data || []).map((t) => t.pulled_at).filter(Boolean).sort().reverse();
 
   return Response.json({
-    scorecard: allScorecard,
+    scorecard,
     meta: {
       markets,
       fromDate,
       toDate,
-      lastSynced,
+      lastSynced: pulledDates[0] || null,
       taskCount: tasks.length,
       reviewCount: reviews.length,
     },
