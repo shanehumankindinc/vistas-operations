@@ -51,24 +51,29 @@ export async function GET(req) {
 
     supabase
       .from("guesty_properties")
-      .select("id, nickname")
+      .select("id, nickname, market")
       .in("market", markets),
   ]);
 
   if (tasksRes.error) return Response.json({ error: tasksRes.error.message }, { status: 500 });
 
-  // Build nickname → listing_id map for review/checkin matching
+  // Build market:nickname → listing_id map — scoped by market to prevent cross-market collisions
   const nicknameToListingId = {};
   for (const p of propertiesRes.data || []) {
-    if (p.nickname && p.id) nicknameToListingId[p.nickname.toLowerCase().trim()] = p.id;
+    if (p.nickname && p.id && p.market) {
+      nicknameToListingId[`${p.market}:${p.nickname.toLowerCase().trim()}`] = p.id;
+    }
   }
 
   const rawTasks = (tasksRes.data || []).filter((t) => !isExcludedVendor(t.vendor_name));
   // Enrich tasks with listing_id so scorecard can match to reviews and checkins
-  const tasks = rawTasks.map((t) => ({
-    ...t,
-    listing_id: t.listing_id || (t.property_name ? nicknameToListingId[t.property_name.toLowerCase().trim()] : null) || null,
-  }));
+  const tasks = rawTasks.map((t) => {
+    const key = t.market && t.property_name ? `${t.market}:${t.property_name.toLowerCase().trim()}` : null;
+    return {
+      ...t,
+      listing_id: t.listing_id || (key ? nicknameToListingId[key] : null) || null,
+    };
+  });
   const reviews = reviewsRes.data || [];
   const refunds = refundsRes.data || [];
   const checkIns = checkInsRes.data || [];
