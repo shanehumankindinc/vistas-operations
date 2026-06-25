@@ -25,23 +25,29 @@ export async function GET(req) {
     // --- REVIEWS ---
     try {
       const reviews = await fetchAllReviews(market);
-      const rows = reviews.map((r) => ({
-        review_id:        r._id,
-        market,
-        submitted_at:     r.submittedAt ? r.submittedAt.slice(0, 10) : null,
-        channel:          r.channel || null,
-        listing_id:       r.listingId || null,
-        overall_score:    r.overallScore ?? null,
-        cleanliness:      r.cleanliness ?? null,
-        accuracy:         r.accuracy ?? null,
-        checkin_score:    r.checkin ?? null,
-        communication:    r.communication ?? null,
-        location:         r.location ?? null,
-        value:            r.value ?? null,
-        review_text:      r.reviewText || null,
-        private_feedback: r.privateFeedback || null,
-        pulled_at:        new Date().toISOString(),
-      }));
+      // Response shape: { data: [...], limit, skip }
+      // Review object: { _id, channelId, listingId, reservationId, createdAt, rawReview, ... }
+      // Scores live inside rawReview (channel-specific sub-object)
+      const rows = reviews.map((r) => {
+        const raw = r.rawReview || {};
+        return {
+          review_id:        r._id,
+          market,
+          submitted_at:     (r.createdAt || r.submittedAt || "").slice(0, 10) || null,
+          channel:          r.channelId || r.channel || null,
+          listing_id:       r.listingId || null,
+          overall_score:    raw.overallRating ?? raw.overallScore ?? r.overallScore ?? null,
+          cleanliness:      raw.cleanliness ?? r.cleanliness ?? null,
+          accuracy:         raw.accuracy ?? r.accuracy ?? null,
+          checkin_score:    raw.checkin ?? raw.checkIn ?? r.checkin ?? null,
+          communication:    raw.communication ?? r.communication ?? null,
+          location:         raw.location ?? r.location ?? null,
+          value:            raw.value ?? r.value ?? null,
+          review_text:      raw.publicReview || raw.reviewText || r.reviewText || null,
+          private_feedback: raw.privateFeedback || raw.privateNotes || r.privateFeedback || null,
+          pulled_at:        new Date().toISOString(),
+        };
+      });
 
       if (rows.length > 0) {
         const { error } = await supabase
