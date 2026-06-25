@@ -30,11 +30,17 @@ export async function GET(req) {
       .gte("scheduled_date", fromDate)
       .lte("scheduled_date", toDate),
 
-    supabase
-      .from("guesty_reviews")
-      .select("*")
-      .in("market", markets)
-      .gte("submitted_at", fromDate),
+    // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
+    // so cleans at the start of the range can still get matched reviews.
+    (() => {
+      const reviewFrom = new Date(fromDate);
+      reviewFrom.setDate(reviewFrom.getDate() - 60);
+      return supabase
+        .from("guesty_reviews")
+        .select("*")
+        .in("market", markets)
+        .gte("submitted_at", reviewFrom.toISOString().slice(0, 10));
+    })(),
 
     supabase
       .from("guesty_refunds")

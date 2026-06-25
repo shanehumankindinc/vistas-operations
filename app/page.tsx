@@ -394,76 +394,7 @@ export default function Dashboard() {
     );
   }
 
-  const summaryTable = (
-    <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#0f172a" }}>
-              <Th k="vendor_name" label="Cleaner" right={false} />
-              <Th k="total_cleans" label="Cleans" />
-              <Th k="on_time_rate" label="On-time %" />
-              <Th k="cleanliness_score" label="Cleanliness" />
-              <Th k="review_count" label="Reviews" />
-              <Th k="median_time" label="Med. Time" />
-              <Th k="tasks_overdue" label="Overdue" />
-              <Th k="refund_count" label="Refunds" />
-              <Th k="property_count" label="Props" />
-              <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map(row => (
-              <tr
-                key={row.vendor_name}
-                onClick={() => setSelectedCleaner(row.vendor_name)}
-                style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
-                onMouseLeave={e => (e.currentTarget.style.background = "")}
-              >
-                <td style={{ padding: "12px 14px" }}>
-                  <div style={{ fontWeight: 600, color: "#0f172a" }}>{row.vendor_name}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                    {row.property_count} {row.property_count === 1 ? "property" : "properties"}
-                  </div>
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
-                  {row.total_cleans}
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: row.on_time_rate != null ? 600 : 400 }}>
-                  {pct(row.on_time_rate)}
-                  <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>
-                    {row.on_time}/{row.decided}
-                  </span>
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: scoreColor(row.cleanliness_score), fontWeight: row.cleanliness_score != null ? 600 : 400 }}>
-                  {fmtScore(row.cleanliness_score)}
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.review_count || "—"}</td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{fmtTime(row.median_time)}</td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#6b7280", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>
-                  {row.tasks_overdue || "—"}
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#6b7280", fontWeight: row.refund_count > 0 ? 600 : 400 }}>
-                  {row.refund_count || "—"}
-                </td>
-                <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.property_count}</td>
-                <td style={{ padding: "12px 14px", textAlign: "center" }}>
-                  <span style={{
-                    width: 10, height: 10, borderRadius: "50%",
-                    background: rateColor(row.on_time_rate),
-                    display: "inline-block",
-                  }} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  // (summary table is now rendered inline in the main card below)
 
   // ─── Cleaner drill-down ───────────────────────────────────────────────────
 
@@ -473,8 +404,8 @@ export default function Dashboard() {
       .sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
 
     return (
-      <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ overflow: "hidden" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10, background: "#f8fafc" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
             {c.vendor_name} — Task Detail
           </span>
@@ -589,18 +520,6 @@ export default function Dashboard() {
         {/* KPI cards */}
         {kpiCards}
 
-        {/* Meta info bar */}
-        {meta && !loading && (
-          <div style={{ display: "flex", gap: 12, marginBottom: 12, fontSize: 12, color: "#94a3b8", flexWrap: "wrap", alignItems: "center" }}>
-            <span>{meta.fromDate} → {meta.toDate}</span>
-            <span>·</span>
-            <span>{meta.taskCount.toLocaleString()} tasks</span>
-            <span>·</span>
-            <span>{meta.reviewCount} reviews</span>
-            {lastSyncedStr && <><span>·</span><span>Last synced {lastSyncedStr}</span></>}
-          </div>
-        )}
-
         {/* Error */}
         {error && (
           <div style={{ marginBottom: 16, padding: "12px 16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>
@@ -610,33 +529,109 @@ export default function Dashboard() {
 
         {/* Loading */}
         {loading && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#94a3b8", fontSize: 14 }}>
+          <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#94a3b8", fontSize: 14 }}>
             Loading…
           </div>
         )}
 
         {/* Empty */}
         {!loading && rows.length === 0 && !error && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 8 }}>
+          <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 8 }}>
             <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>No cleaner data for this range.</p>
             <p style={{ color: "#94a3b8", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
           </div>
         )}
 
-        {/* Summary table */}
+        {/* Main card: meta strip + summary table + drill-down, all in one unified container */}
         {!loading && rows.length > 0 && (
-          <>
-            {summaryTable}
-            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
-              Click any row to view that cleaner's individual tasks below.
-            </p>
-          </>
-        )}
+          <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
 
-        {/* Drill-down (shown below table when a cleaner is selected) */}
-        {!loading && drillDown && (
-          <div style={{ marginTop: 20 }}>
-            {drillDown}
+            {/* Meta strip */}
+            {meta && (
+              <div style={{ padding: "8px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap", alignItems: "center" }}>
+                <span>{meta.fromDate} → {meta.toDate}</span>
+                <span>·</span>
+                <span>{meta.taskCount.toLocaleString()} tasks</span>
+                <span>·</span>
+                <span>{meta.reviewCount} reviews</span>
+                {lastSyncedStr && <><span>·</span><span>Last synced {lastSyncedStr}</span></>}
+                <span style={{ marginLeft: "auto", color: "#cbd5e1", fontSize: 10 }}>Click a row to drill down ↓</span>
+              </div>
+            )}
+
+            {/* Summary table */}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#0f172a" }}>
+                    <Th k="vendor_name" label="Cleaner" right={false} />
+                    <Th k="total_cleans" label="Cleans" />
+                    <Th k="on_time_rate" label="On-time %" />
+                    <Th k="cleanliness_score" label="Cleanliness" />
+                    <Th k="review_count" label="Reviews" />
+                    <Th k="median_time" label="Med. Time" />
+                    <Th k="tasks_overdue" label="Overdue" />
+                    <Th k="refund_count" label="Refunds" />
+                    <Th k="property_count" label="Props" />
+                    <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map(row => (
+                    <tr
+                      key={row.vendor_name}
+                      onClick={() => setSelectedCleaner(row.vendor_name)}
+                      style={{
+                        borderBottom: "1px solid #f1f5f9", cursor: "pointer",
+                        background: selectedCleaner === row.vendor_name ? "#f0f9ff" : undefined,
+                      }}
+                      onMouseEnter={e => { if (selectedCleaner !== row.vendor_name) e.currentTarget.style.background = "#f8fafc"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = selectedCleaner === row.vendor_name ? "#f0f9ff" : ""; }}
+                    >
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ fontWeight: 600, color: "#0f172a" }}>{row.vendor_name}</div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                          {row.property_count} {row.property_count === 1 ? "property" : "properties"}
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                        {row.total_cleans}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: row.on_time_rate != null ? 600 : 400 }}>
+                        {pct(row.on_time_rate)}
+                        <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>
+                          {row.on_time}/{row.decided}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: scoreColor(row.cleanliness_score), fontWeight: row.cleanliness_score != null ? 600 : 400 }}>
+                        {fmtScore(row.cleanliness_score)}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.review_count || "—"}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{fmtTime(row.median_time)}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#6b7280", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>
+                        {row.tasks_overdue || "—"}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#6b7280", fontWeight: row.refund_count > 0 ? 600 : 400 }}>
+                        {row.refund_count || "—"}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.property_count}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: rateColor(row.on_time_rate), display: "inline-block" }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Drill-down: appears inline below the table row, separated by a dark divider */}
+            {drillDown && (
+              <div style={{ borderTop: "3px solid #0f172a" }}>
+                {drillDown}
+              </div>
+            )}
           </div>
         )}
       </div>
