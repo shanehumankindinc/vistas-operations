@@ -47,10 +47,10 @@ export async function GET(req) {
     if (props.length > 0) {
       const bzId = props[0].reference_property_id;
       const today = new Date().toISOString().slice(0, 10);
-      const from = new Date(); from.setDate(from.getDate() - 30);
+      const from = new Date(); from.setDate(from.getDate() - 90);
       const fromStr = from.toISOString().slice(0, 10);
       const taskRes = await fetch(
-        `${BASE}/inventory/v1/task?reference_property_id=${bzId}&scheduled_date=${fromStr},${today}&limit=1`,
+        `${BASE}/inventory/v1/task?reference_property_id=${bzId}&scheduled_date=${fromStr},${today}&limit=3`,
         { headers }
       );
       const taskData = await taskRes.json();
@@ -66,6 +66,12 @@ export async function GET(req) {
       rawTask_assignedTo: rawTask?.assigned_to ?? null,
       rawTask_assignments: rawTask?.assignments ?? null,
       rawTask_vendor: rawTask?.vendor ?? null,
+      rawTask_organization: rawTask?.organization ?? null,
+      rawTask_company: rawTask?.company ?? null,
+      rawTask_account: rawTask?.account ?? null,
+      rawTask_service_provider: rawTask?.service_provider ?? null,
+      // Full dump of first task for inspection
+      rawTask_full: rawTask,
     });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
