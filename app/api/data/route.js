@@ -27,7 +27,8 @@ export async function GET(req) {
       .select("*")
       .in("market", markets)
       .gte("scheduled_date", fromDate)
-      .lte("scheduled_date", toDate),
+      .lte("scheduled_date", toDate)
+      .limit(10000),
 
     // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
     (() => {
