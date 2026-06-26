@@ -29,6 +29,7 @@ type EnrichedTask = {
   is_finished: boolean;
   finished_at: string | null;
   finished_cst: { dateStr: string; hour: number; minute: number } | null;
+  tz_abbr: string | null;
   clean_status: string | null;
   total_time: string | null;
   on_time: boolean;
@@ -139,9 +140,10 @@ function NavSelect({ value, onChange, options }: {
 
 function exportCSV(cleaner: Row, meta: Meta | null) {
   const tasks = (cleaner.enriched_tasks || []).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
-  const headers = ["Sched Date", "Property", "Crew", "Status", "Finished (CST)", "On Time?", "Deadline Type", "Deadline", "Duration (min)", "Cleanliness", "Review", "Refund?"];
+  const headers = ["Sched Date", "Property", "Crew", "Status", "Finished (Local Time)", "On Time?", "Deadline Type", "Deadline", "Duration (min)", "Cleanliness", "Review", "Refund?"];
   const csvRows = [headers, ...tasks.map(t => {
-    const finishedStr = t.finished_cst ? `${t.finished_cst.dateStr} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} CST` : "";
+    const abbr = t.tz_abbr || "CT";
+    const finishedStr = t.finished_cst ? `${t.finished_cst.dateStr} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} ${abbr}` : "";
     const refundAmt = t.linked_refunds.reduce((s, r) => s + r.refund_amount, 0);
     return [
       t.scheduled_date,
@@ -509,7 +511,7 @@ export default function Dashboard() {
                 <tbody>
                   {tasks.map((t, i) => {
                     const finishedStr = t.finished_cst
-                      ? `${fmtDateShort(t.finished_cst.dateStr)} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} CST`
+                      ? `${fmtDateShort(t.finished_cst.dateStr)} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} ${t.tz_abbr || "CT"}`
                       : null;
                     const statusColor = !t.decided ? "#9ca3af" : t.is_finished ? "#16a34a" : "#dc2626";
                     const statusLabel = !t.decided ? "Scheduled" : t.is_finished ? "Completed" : "Overdue";
