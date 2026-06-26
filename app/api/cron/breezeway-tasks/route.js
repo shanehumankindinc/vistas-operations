@@ -112,7 +112,7 @@ export async function GET(req) {
         const taskType = t.type_department || t.task_type || t.type || null;
 
         // Resolve task title — Breezeway uses name, not task_title
-        const taskTitle = t.task_title || t.title || null;
+        const taskTitle = t.name || t.task_title || t.title || null;
 
         rows.push({
           task_id:        String(t.id),

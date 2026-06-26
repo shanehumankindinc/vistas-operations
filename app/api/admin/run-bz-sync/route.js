@@ -117,7 +117,7 @@ export async function GET(req) {
         const createdBy = t.created_by?.name || t.created_by?.display_name ||
           (typeof t.created_by === "string" ? t.created_by : null);
         const taskType = t.type_department || t.task_type || t.type || null;
-        const taskTitle = t.task_title || t.title || null;
+        const taskTitle = t.name || t.task_title || t.title || null;
 
         rows.push({
           task_id:        String(t.id),
