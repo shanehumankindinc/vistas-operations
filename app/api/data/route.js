@@ -1,6 +1,5 @@
 import { getSupabase } from "@/lib/db";
 import { MARKET_KEYS } from "@/lib/markets";
-import { isExcludedVendor } from "@/lib/markets";
 import { buildScorecardData } from "@/lib/scorecard";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +21,7 @@ export async function GET(req) {
   const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
   const supabase = getSupabase();
 
-  const [tasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes] = await Promise.all([
+  const [tasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes, vendorMapRes] = await Promise.all([
     supabase
       .from("breezeway_tasks")
       .select("*")
@@ -31,7 +30,6 @@ export async function GET(req) {
       .lte("scheduled_date", toDate),
 
     // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
-    // so cleans at the start of the range can still get matched reviews.
     (() => {
       const reviewFrom = new Date(fromDate);
       reviewFrom.setDate(reviewFrom.getDate() - 60);
@@ -59,11 +57,23 @@ export async function GET(req) {
       .from("guesty_properties")
       .select("id, nickname, market")
       .in("market", markets),
+
+    // Vendor map: individual_name → company_name + excluded flag
+    supabase
+      .from("vendor_map")
+      .select("market, individual_name, company_name, excluded")
+      .in("market", markets),
   ]);
 
   if (tasksRes.error) return Response.json({ error: tasksRes.error.message }, { status: 500 });
 
-  // Build market:nickname → listing_id map — scoped by market to prevent cross-market collisions
+  // Build vendor lookup: "market:individual_name" → { company_name, excluded }
+  const vendorLookup = {};
+  for (const v of vendorMapRes.data || []) {
+    vendorLookup[`${v.market}:${v.individual_name}`] = v;
+  }
+
+  // Build market:nickname → listing_id map
   const nicknameToListingId = {};
   for (const p of propertiesRes.data || []) {
     if (p.nickname && p.id && p.market) {
@@ -71,22 +81,37 @@ export async function GET(req) {
     }
   }
 
-  const rawTasks = (tasksRes.data || []).filter((t) => !isExcludedVendor(t.vendor_name));
-  // Enrich tasks with listing_id so scorecard can match to reviews and checkins
-  const tasks = rawTasks.map((t) => {
-    const key = t.market && t.property_name ? `${t.market}:${t.property_name.toLowerCase().trim()}` : null;
-    return {
-      ...t,
-      listing_id: t.listing_id || (key ? nicknameToListingId[key] : null) || null,
-    };
-  });
+  const rawTasks = tasksRes.data || [];
+  const tasks = rawTasks
+    .map((t) => {
+      const mapKey = `${t.market}:${t.vendor_name}`;
+      const entry = vendorLookup[mapKey];
+
+      // Exclude if flagged in vendor_map
+      if (entry?.excluded) return null;
+
+      // Apply company_name alias if mapped; otherwise use individual name as-is
+      const displayName = entry?.company_name || t.vendor_name;
+
+      const propKey = t.market && t.property_name
+        ? `${t.market}:${t.property_name.toLowerCase().trim()}`
+        : null;
+
+      return {
+        ...t,
+        vendor_name: displayName,
+        listing_id: t.listing_id || (propKey ? nicknameToListingId[propKey] : null) || null,
+      };
+    })
+    .filter(Boolean);
+
   const reviews = reviewsRes.data || [];
   const refunds = refundsRes.data || [];
   const checkIns = checkInsRes.data || [];
 
   const scorecard = buildScorecardData({ tasks, reviews, refunds, checkIns, startDate: fromDate, endDate: toDate });
 
-  const pulledDates = (tasksRes.data || []).map((t) => t.pulled_at).filter(Boolean).sort().reverse();
+  const pulledDates = rawTasks.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
 
   return Response.json({
     scorecard,

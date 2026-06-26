@@ -109,6 +109,20 @@ export async function GET(req) {
         }
       }
 
+      // Auto-register any new vendor names into vendor_map (excluded=false, no company_name)
+      // so they appear in the scorecard immediately and can be mapped/excluded later.
+      const newVendors = [...new Set(rows.map((r) => r.vendor_name).filter(Boolean))].map((name) => ({
+        market,
+        individual_name: name,
+        excluded: false,
+        first_seen: new Date().toISOString().slice(0, 10),
+      }));
+      if (newVendors.length > 0) {
+        await supabase
+          .from("vendor_map")
+          .upsert(newVendors, { onConflict: "market,individual_name", ignoreDuplicates: true });
+      }
+
       results[market] = {
         bz_props_in_account: bzProps.length,
         properties_used: properties.length,
