@@ -419,13 +419,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0d1117", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#e2e8f0" }}>
       {nav}
-      <div style={{ maxWidth: 1300, margin: "0 auto", padding: "20px 24px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px 24px" }}>
 
         {/* KPI cards */}
         {!loading && kpiRows.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 16 }}>
             {[
               { label: "Cleaners", value: kpiRows.length, render: (v: number) => v.toLocaleString() },
               { label: "Total Cleans", value: kpiRows.reduce((s, r) => s + r.total_cleans, 0), render: (v: number) => v.toLocaleString() },
@@ -434,34 +434,34 @@ export default function Dashboard() {
               { label: "Reviews", value: kpiRows.reduce((s, r) => s + r.review_count, 0), render: (v: number) => v.toLocaleString() },
               { label: "Properties", value: kpiRows.reduce((s, r) => s + r.property_count, 0), render: (v: number) => v.toLocaleString() },
             ].map(({ label, value, render, color }) => (
-              <div key={label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 18px" }}>
-                <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+              <div key={label} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                <div style={{ fontSize: 22, fontWeight: 700, color: color || "#0f172a", lineHeight: 1 }}>{(render as (v: any) => string)(value)}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: color || "#ffffff", lineHeight: 1 }}>{(render as (v: any) => string)(value)}</div>
               </div>
             ))}
           </div>
         )}
 
-        {error && <div style={{ marginBottom: 16, padding: "12px 16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 16, padding: "12px 16px", background: "#2d1515", border: "1px solid #7f1d1d", borderRadius: 8, color: "#f87171", fontSize: 13 }}>{error}</div>}
 
-        <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+        <div style={{ background: "#161b27", borderRadius: 10, border: "1px solid #1e2736", overflow: "hidden" }}>
           {meta && !loading && (
-            <div style={{ padding: "8px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", gap: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ padding: "8px 16px", borderBottom: "1px solid #1e2736", display: "flex", gap: 12, fontSize: 11, color: "#475569", flexWrap: "wrap", alignItems: "center" }}>
               <span>{meta.fromDate} → {meta.toDate}</span>
               <span>·</span><span>{meta.taskCount.toLocaleString()} tasks</span>
               <span>·</span><span>{meta.reviewCount} reviews</span>
               {lastSyncedStr && <><span>·</span><span>Last synced {lastSyncedStr}</span></>}
-              <span style={{ marginLeft: "auto", color: "#cbd5e1", fontSize: 10 }}>Click a row to drill down</span>
+              <span style={{ marginLeft: "auto", color: "#334155", fontSize: 10 }}>Click a row to drill down</span>
             </div>
           )}
 
-          {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#94a3b8", fontSize: 14 }}>Loading…</div>}
+          {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#475569", fontSize: 14 }}>Loading…</div>}
 
           {!loading && rows.length === 0 && !error && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", gap: 8 }}>
               <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>No cleaner data for this range.</p>
-              <p style={{ color: "#94a3b8", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
+              <p style={{ color: "#475569", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
             </div>
           )}
 
@@ -469,7 +469,7 @@ export default function Dashboard() {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: "#0f172a" }}>
+                  <tr style={{ background: "#0d1117" }}>
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
                     <Th k="on_time_rate" label="On-time %" />
@@ -487,25 +487,25 @@ export default function Dashboard() {
                   {visibleRows.map(row => (
                     <tr key={row.vendor_name}
                       onClick={() => { setDrillCleaner(row); setFilterCleaner(row.vendor_name); }}
-                      style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
+                      style={{ borderBottom: "1px solid #1e2736", cursor: "pointer" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#1e2736")}
                       onMouseLeave={e => (e.currentTarget.style.background = "")}>
                       <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontWeight: 600, color: "#0f172a" }}>{row.vendor_name}</div>
-                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
+                        <div style={{ fontWeight: 600, color: "#e2e8f0" }}>{row.vendor_name}</div>
+                        <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
                       </td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
                       <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 600 }}>
                         {pct(row.on_time_rate)}
-                        <span style={{ color: "#94a3b8", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>
+                        <span style={{ color: "#475569", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>
                       </td>
                       <td style={{ padding: "12px 14px", textAlign: "right", color: scoreColor(row.cleanliness_score), fontWeight: row.cleanliness_score != null ? 600 : 400 }}>{fmtScore(row.cleanliness_score)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.review_count || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{fmtTime(row.median_time)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#6b7280", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>{row.tasks_overdue || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#6b7280", fontWeight: row.refund_count > 0 ? 600 : 400 }}>{row.refund_count || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_amount > 0 ? "#dc2626" : "#6b7280", fontWeight: row.refund_amount > 0 ? 600 : 400 }}>{fmtMoney(row.refund_amount)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#6b7280" }}>{row.property_count}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{row.review_count || "—"}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{fmtTime(row.median_time)}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#475569", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>{row.tasks_overdue || "—"}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#475569", fontWeight: row.refund_count > 0 ? 600 : 400 }}>{row.refund_count || "—"}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_amount > 0 ? "#dc2626" : "#475569", fontWeight: row.refund_amount > 0 ? 600 : 400 }}>{fmtMoney(row.refund_amount)}</td>
+                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{row.property_count}</td>
                       <td style={{ padding: "12px 14px", textAlign: "center" }}>
                         <span style={{ width: 10, height: 10, borderRadius: "50%", background: rateColor(row.on_time_rate), display: "inline-block" }} />
                       </td>
