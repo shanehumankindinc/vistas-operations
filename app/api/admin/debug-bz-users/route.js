@@ -1,79 +1,63 @@
 import { getBzToken } from "@/lib/breezeway";
-import { MARKETS } from "@/lib/markets";
+import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-// Debug: inspect raw Breezeway task structure to find vendor/role fields.
-// Also probes any remaining user-list endpoint candidates.
+// Debug: find a real raw Breezeway task to inspect vendor/company fields.
 // ?market=branson|deep_creek|poconos  (default: poconos)
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const market = searchParams.get("market") || "poconos";
 
+  const supabase = getSupabase();
+
+  // 1. What vendor names do we already have in Supabase for this market?
+  const { data: vendors } = await supabase
+    .from("breezeway_tasks")
+    .select("vendor_name, bz_property_id")
+    .eq("market", market)
+    .not("vendor_name", "is", null)
+    .limit(5);
+
+  // 2. Try to fetch a raw task from Breezeway using a known bz_property_id from Supabase
+  let rawTask = null;
+  let apiError = null;
+
   try {
     const token = await getBzToken(market);
     const headers = { Authorization: `JWT ${token}`, Accept: "application/json" };
     const BASE = "https://api.breezeway.io/public";
-    const { bzIdentity } = MARKETS[market];
 
-    // 1. Try identity-scoped user endpoints
-    const userCandidates = [
-      `/auth/v1/identity/${bzIdentity}/user`,
-      `/auth/v1/identity/${bzIdentity}/member`,
-      `/inventory/v1/identity/${bzIdentity}/user`,
-      `/inventory/v1/identity/${bzIdentity}/vendor`,
-      `/auth/v2/user`,
-      `/auth/v2/member`,
-    ];
+    // Use a known property ID from our DB
+    const knownPropId = vendors?.[0]?.bz_property_id;
 
-    const userProbes = await Promise.all(
-      userCandidates.map(async (path) => {
-        try {
-          const res = await fetch(`${BASE}${path}?limit=3`, { headers });
-          const body = await res.json().catch(() => null);
-          return { path, status: res.status, body };
-        } catch (e) {
-          return { path, status: "error", error: e.message };
-        }
-      })
-    );
-
-    // 2. Fetch one raw task and show all its fields (especially finished_by / assignments)
-    const propRes = await fetch(`${BASE}/inventory/v1/property?limit=1`, { headers });
-    const propData = await propRes.json();
-    const props = Array.isArray(propData) ? propData : (propData.results || []);
-    let rawTask = null;
-
-    if (props.length > 0) {
-      const bzId = props[0].reference_property_id;
+    if (knownPropId) {
       const today = new Date().toISOString().slice(0, 10);
       const from = new Date(); from.setDate(from.getDate() - 90);
       const fromStr = from.toISOString().slice(0, 10);
-      const taskRes = await fetch(
-        `${BASE}/inventory/v1/task?reference_property_id=${bzId}&scheduled_date=${fromStr},${today}&limit=3`,
+
+      const res = await fetch(
+        `${BASE}/inventory/v1/task?reference_property_id=${knownPropId}&scheduled_date=${fromStr},${today}&limit=3`,
         { headers }
       );
-      const taskData = await taskRes.json();
-      const tasks = Array.isArray(taskData) ? taskData : (taskData.results || taskData.data || []);
-      rawTask = tasks[0] || null;
-    }
+      const body = await res.json().catch(() => null);
+      const tasks = Array.isArray(body) ? body : (body?.results || body?.data || []);
 
-    return Response.json({
-      market,
-      userProbes: userProbes.filter(p => p.status !== 404),
-      rawTaskKeys: rawTask ? Object.keys(rawTask) : null,
-      rawTask_finishedBy: rawTask?.finished_by ?? null,
-      rawTask_assignedTo: rawTask?.assigned_to ?? null,
-      rawTask_assignments: rawTask?.assignments ?? null,
-      rawTask_vendor: rawTask?.vendor ?? null,
-      rawTask_organization: rawTask?.organization ?? null,
-      rawTask_company: rawTask?.company ?? null,
-      rawTask_account: rawTask?.account ?? null,
-      rawTask_service_provider: rawTask?.service_provider ?? null,
-      // Full dump of first task for inspection
-      rawTask_full: rawTask,
-    });
-  } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+      // Pick first task that has a finished_by or assigned_to
+      rawTask = tasks.find(t => t.finished_by || t.assigned_to) || tasks[0] || null;
+    }
+  } catch (e) {
+    apiError = e.message;
   }
+
+  return Response.json({
+    market,
+    supabase_vendors: vendors,
+    apiError,
+    rawTaskKeys: rawTask ? Object.keys(rawTask) : null,
+    rawTask_finishedBy: rawTask?.finished_by ?? null,
+    rawTask_assignedTo: rawTask?.assigned_to ?? null,
+    rawTask_assignments: rawTask?.assignments ?? null,
+    rawTask_full: rawTask,
+  });
 }
