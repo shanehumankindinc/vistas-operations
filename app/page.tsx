@@ -510,7 +510,7 @@ export default function Dashboard() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#1e2a3a" }}>
-                    {["Sched Date", "Property", "Issues", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
+                    {["Sched Date", "Property", "Task", "Issues", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
                       <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -539,20 +539,11 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
-                        <td style={{ padding: "9px 12px", minWidth: 140, maxWidth: 220 }}>
-                          {(t.linked_issues || []).length === 0
-                            ? <span style={{ color: "#d1d5db" }}>—</span>
-                            : <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                                {(t.linked_issues || []).map((issue, idx) => (
-                                  <span key={issue.task_id || idx} style={{
-                                    fontSize: 12, color: "#d97706", fontWeight: 500,
-                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200,
-                                  }} title={issue.title || undefined}>
-                                    ⚠ {issue.title || "Issue"}
-                                  </span>
-                                ))}
-                              </div>
-                          }
+                        <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 12 }}>{t.task_title || "Clean"}</td>
+                        <td style={{ padding: "9px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
+                          {(t.linked_issues || []).length > 0
+                            ? <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 13 }}>{(t.linked_issues || []).length}</span>
+                            : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.individual_name || "—"}</td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: statusColor, fontWeight: 600 }}>{statusLabel}</td>
@@ -579,7 +570,7 @@ export default function Dashboard() {
                     );
                   })}
                   {tasks.length === 0 && (
-                    <tr><td colSpan={12} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
+                    <tr><td colSpan={13} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
                   )}
                 </tbody>
               </table>
