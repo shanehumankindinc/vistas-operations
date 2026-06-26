@@ -4,10 +4,11 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page and auth API routes through
+  // Allow login page, auth API routes, and unauthenticated admin triggers through
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/admin/run-bz-sync") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon")
   ) {
