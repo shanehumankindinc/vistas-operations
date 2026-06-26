@@ -25,6 +25,23 @@ export async function GET(req) {
     .select("id, market");
   if (gpErr) return Response.json({ error: `guesty_properties lookup failed: ${gpErr.message}` }, { status: 500 });
 
+  // Refresh Branson BZ token into KV if needed (branson-dashboard cron may not have run)
+  if (markets.includes("branson") && process.env.BREEZEWAY_CLIENT_ID && process.env.BREEZEWAY_CLIENT_SECRET) {
+    try {
+      const bzAuth = await fetch("https://api.breezeway.io/public/auth/v1/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: process.env.BREEZEWAY_CLIENT_ID, client_secret: process.env.BREEZEWAY_CLIENT_SECRET }),
+      });
+      if (bzAuth.ok) {
+        const { access_token } = await bzAuth.json();
+        const { Redis } = await import("@upstash/redis");
+        const kv = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+        await kv.set("breezeway:access_token", access_token, { ex: 82800 });
+      }
+    } catch { /* non-fatal — getBzToken will error clearly if still missing */ }
+  }
+
   const listingToMarket = {};
   (guestyProps || []).forEach((p) => { listingToMarket[p.id] = p.market; });
 
