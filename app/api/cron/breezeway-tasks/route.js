@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/db";
-import { fetchAllBzPropertiesForMarket, fetchBzTasksForProperty } from "@/lib/breezeway";
+import { fetchAllBzPropertiesForMarket, fetchBzTasksForProperty, fetchBzMaintenanceTasksForProperty } from "@/lib/breezeway";
 import { MARKET_KEYS, isExcludedVendor } from "@/lib/markets";
 
 export const maxDuration = 300;
@@ -62,7 +62,15 @@ export async function GET(req) {
             const propName = prop.name || prop.display || String(prop.id);
             if (!bzId) return [];
             try {
-              return await fetchBzTasksForProperty(bzId, propName, fromStr, toDate, market);
+              // Fetch both scheduled cleaning tasks and maintenance tasks created in this window
+              const [cleanTasks, maintTasks] = await Promise.all([
+                fetchBzTasksForProperty(bzId, propName, fromStr, toDate, market),
+                fetchBzMaintenanceTasksForProperty(bzId, propName, fromStr, toDate, market).catch(() => []),
+              ]);
+              // Dedupe by task id (maintenance fetch may overlap with scheduled fetch)
+              const seen = new Set(cleanTasks.map((t) => String(t.id)));
+              const newMaint = maintTasks.filter((t) => !seen.has(String(t.id)));
+              return [...cleanTasks, ...newMaint];
             } catch (e) {
               if (!e.message.includes("422") && !e.message.includes("404")) {
                 errors++;
@@ -95,14 +103,27 @@ export async function GET(req) {
       for (const t of allRows) {
         const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
         if (isExcludedVendor(vendorName)) continue;
+
+        // Resolve created_by — Breezeway may return an object or a string
+        const createdBy = t.created_by?.name || t.created_by?.display_name ||
+          (typeof t.created_by === "string" ? t.created_by : null);
+
+        // Resolve task type — Breezeway uses type_department, not task_type
+        const taskType = t.type_department || t.task_type || t.type || null;
+
+        // Resolve task title — Breezeway uses name, not task_title
+        const taskTitle = t.task_title || t.title || null;
+
         rows.push({
           task_id:        String(t.id),
           market,
-          property_name:  t._propName || t.name || null,
+          property_name:  t._propName || null,
           bz_property_id: String(t.reference_property_id || t._bzId || ""),
           vendor_name:    vendorName,
-          task_title:     t.task_title || null,
-          task_type:      t.task_type || null,
+          task_title:     taskTitle,
+          task_type:      taskType,
+          created_by:     createdBy,
+          created_at:     t.created_at ? new Date(t.created_at).toISOString() : null,
           clean_status:   t.status || null,
           scheduled_date: t.scheduled_date || null,
           started_at:     t.started_at ? new Date(t.started_at).toISOString() : null,

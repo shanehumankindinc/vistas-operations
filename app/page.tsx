@@ -44,6 +44,7 @@ type Row = {
   vendor_name: string;
   total_cleans: number;
   total_tasks: number;
+  issues_created: number;
   on_time: number;
   decided: number;
   on_time_rate: number | null;
@@ -65,7 +66,7 @@ type Meta = {
   reviewCount: number;
 };
 
-type SortKey = "vendor_name" | "total_cleans" | "total_tasks" | "on_time_rate" | "cleanliness_score" |
+type SortKey = "vendor_name" | "total_cleans" | "total_tasks" | "issues_created" | "on_time_rate" | "cleanliness_score" |
   "review_count" | "median_time" | "tasks_overdue" | "refund_count" | "refund_amount" | "property_count";
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -487,6 +488,7 @@ export default function Dashboard() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             <Chip label="Cleans" value={kpiCleans} />
             <Chip label="Tasks" value={c.total_tasks || kpiCleans} />
+            <Chip label="Issues Created" value={c.issues_created || 0} color={(c.issues_created || 0) > 0 ? "#16a34a" : undefined} />
             <Chip label="On-time Rate" value={pct(kpiOnTimeRate)} color={rateColor(kpiOnTimeRate)} />
             <Chip label="On-time / Cleans" value={`${kpiOnTime} / ${kpiDecided}`} />
             <Chip label="Tasks Overdue" value={kpiOverdue > 0 ? kpiOverdue : "None"} color={kpiOverdue > 0 ? "#dc2626" : "#16a34a"} />
@@ -607,7 +609,7 @@ export default function Dashboard() {
             {[
               { label: "Cleaners", value: kpiRows.length, render: (v: number) => String(v) },
               { label: "Total Cleans", value: kpiRows.reduce((s, r) => s + r.total_cleans, 0), render: (v: number) => v.toLocaleString() },
-              { label: "Total Tasks", value: kpiRows.reduce((s, r) => s + (r.total_tasks || 0), 0), render: (v: number) => v.toLocaleString() },
+              { label: "Issues Created", value: kpiRows.reduce((s, r) => s + (r.issues_created || 0), 0), render: (v: number) => v.toLocaleString() },
               { label: "Avg On-time", value: kpiOnTime, render: (v: number | null) => pct(v), color: rateColor(kpiOnTime) },
               { label: "Avg Cleanliness", value: kpiCleanliness, render: (v: number | null) => v == null ? "—" : v.toFixed(2), color: scoreColor(kpiCleanliness) },
               { label: "Reviews", value: kpiRows.reduce((s, r) => s + r.review_count, 0), render: (v: number) => v.toLocaleString() },
@@ -642,6 +644,7 @@ export default function Dashboard() {
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
                     <Th k="total_tasks" label="Tasks" />
+                    <Th k="issues_created" label="Issues" />
                     <Th k="on_time_rate" label="On-time %" />
                     <Th k="cleanliness_score" label="Cleanliness" />
                     <Th k="review_count" label="Reviews" />
@@ -666,6 +669,7 @@ export default function Dashboard() {
                       </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_tasks || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: (row.issues_created || 0) > 0 ? "#16a34a" : "#9ca3af", fontWeight: (row.issues_created || 0) > 0 ? 700 : 400 }}>{row.issues_created || "—"}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 700 }}>
                         {pct(row.on_time_rate)}
                         <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>
