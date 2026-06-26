@@ -269,8 +269,8 @@ export default function Dashboard() {
       <div style={{ flex: 1 }} />
       {drillCleaner && (
         <button onClick={() => exportCSV(drillCleaner, meta)} style={{
-          padding: "5px 14px", border: "1px solid #16a34a", borderRadius: 6, background: "#16a34a",
-          color: "#ffffff", fontSize: 12, fontWeight: 600, cursor: "pointer", marginRight: 8,
+          padding: "5px 14px", border: "1px solid #334155", borderRadius: 6, background: "transparent",
+          color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", marginRight: 8,
         }}>
           ↓ Export CSV
         </button>
@@ -299,9 +299,9 @@ export default function Dashboard() {
 
     function Chip({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
       return (
-        <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "10px 16px", minWidth: 90 }}>
-          <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: color || "#ffffff" }}>{value}</div>
+        <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: color || "#1a202c" }}>{value}</span>
         </div>
       );
     }
@@ -309,18 +309,19 @@ export default function Dashboard() {
     const totalRefundAmt = tasks.flatMap(t => t.linked_refunds).reduce((s, r) => s + r.refund_amount, 0);
 
     return (
-      <div style={{ minHeight: "100vh", background: "#0d1117", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#e2e8f0" }}>
+      <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
         {nav}
-        <div style={{ maxWidth: 1500, margin: "0 auto", padding: "20px 24px" }}>
+        <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
 
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#ffffff" }}>{c.vendor_name}</h2>
-            <span style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 6, padding: "3px 10px", fontSize: 12, color: "#94a3b8" }}>{dateLabel}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a202c" }}>{c.vendor_name}</h1>
+            <span style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 5, padding: "3px 10px", fontSize: 12, color: "#6b7280" }}>{dateLabel}</span>
           </div>
+          <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#9ca3af" }}>Individual clean history with on-time performance, cleanliness ratings, and refund exposure.</p>
 
           {/* KPI chips */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             <Chip label="Cleans" value={c.total_cleans} />
             <Chip label="On-time Rate" value={pct(c.on_time_rate)} color={rateColor(c.on_time_rate)} />
             <Chip label="On-time / Cleans" value={`${c.on_time} / ${c.decided}`} />
@@ -332,16 +333,16 @@ export default function Dashboard() {
           </div>
 
           {/* Task table */}
-          <div style={{ background: "#161b27", borderRadius: 10, border: "1px solid #1e2736", overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e2736", fontSize: 12, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Cleans &amp; Issues ({tasks.length}) — On-time rate applies to cleaning tasks only
+          <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid #f1f5f9", fontSize: 12, color: "#9ca3af" }}>
+              {tasks.length} cleans &nbsp;·&nbsp; On-time rate applies to cleaning tasks only
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: "#0d1117" }}>
+                  <tr style={{ background: "#1e2a3a" }}>
                     {["Sched Date", "Property", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
-                      <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -350,49 +351,50 @@ export default function Dashboard() {
                     const finishedStr = t.finished_cst
                       ? `${fmtDateShort(t.finished_cst.dateStr)} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} CST`
                       : null;
-                    const statusColor = !t.decided ? "#64748b" : t.is_finished ? "#16a34a" : "#dc2626";
+                    const statusColor = !t.decided ? "#9ca3af" : t.is_finished ? "#16a34a" : "#dc2626";
                     const statusLabel = !t.decided ? "Scheduled" : t.is_finished ? "Completed" : "Overdue";
                     const deadlineLabel = t.deadline
-                      ? <span style={{ color: t.deadline_type === "same-day" ? "#f59e0b" : "#3b82f6" }}>
+                      ? <span style={{ color: t.deadline_type === "same-day" ? "#d97706" : "#3b82f6" }}>
                           {t.deadline_type === "same-day" ? "Same-day" : `Next: ${t.deadline}`}
                         </span>
-                      : <span style={{ color: "#475569" }}>—</span>;
+                      : <span style={{ color: "#d1d5db" }}>—</span>;
                     const reviewText = (t.review as { review_text?: string } | null)?.review_text || null;
                     const refundAmt = t.linked_refunds.reduce((s, r) => s + r.refund_amount, 0);
 
                     return (
-                      <tr key={t.task_id || i} style={{ borderBottom: "1px solid #1e2736" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "#1e2736")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#94a3b8", fontWeight: 500 }}>{fmtDateShort(t.scheduled_date)}</td>
-                        <td style={{ padding: "9px 12px", color: "#e2e8f0", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <tr key={t.task_id || i}
+                        style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafbfc" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#eef2ff")}
+                        onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#6b7280", fontWeight: 500 }}>{fmtDateShort(t.scheduled_date)}</td>
+                        <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
-                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: statusColor, fontWeight: 500 }}>{statusLabel}</td>
-                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{finishedStr || "—"}</td>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: statusColor, fontWeight: 600 }}>{statusLabel}</td>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#6b7280" }}>{finishedStr || "—"}</td>
                         <td style={{ padding: "9px 12px", textAlign: "center" }}>
-                          {!t.decided ? <span style={{ color: "#475569" }}>—</span>
-                            : t.on_time ? <span style={{ color: "#16a34a", fontSize: 16 }}>✓</span>
-                            : <span style={{ color: "#dc2626", fontSize: 16 }}>✗</span>}
+                          {!t.decided ? <span style={{ color: "#d1d5db" }}>—</span>
+                            : t.on_time ? <span style={{ color: "#16a34a", fontSize: 15, fontWeight: 700 }}>✓</span>
+                            : <span style={{ color: "#dc2626", fontSize: 15, fontWeight: 700 }}>✗</span>}
                         </td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>{deadlineLabel}</td>
-                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#64748b" }}>{fmtTime(parseTimeStr(t.total_time))}</td>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#6b7280" }}>{fmtTime(parseTimeStr(t.total_time))}</td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: scoreColor(t.review?.cleanliness ?? null), fontWeight: t.review?.cleanliness != null ? 700 : 400 }}>
                           {t.review?.cleanliness != null ? t.review.cleanliness.toFixed(1) : "—"}
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#94a3b8", maxWidth: 300 }}>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", maxWidth: 300 }}>
                           {reviewText
                             ? <span title={reviewText} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reviewText}</span>
-                            : <span style={{ color: "#475569" }}>—</span>}
+                            : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
-                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: refundAmt > 0 ? "#dc2626" : "#475569", fontWeight: refundAmt > 0 ? 700 : 400 }}>
+                        <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: refundAmt > 0 ? "#dc2626" : "#d1d5db", fontWeight: refundAmt > 0 ? 700 : 400 }}>
                           {refundAmt > 0 ? `$${refundAmt}` : "—"}
                         </td>
                       </tr>
                     );
                   })}
                   {tasks.length === 0 && (
-                    <tr><td colSpan={10} style={{ padding: "32px", textAlign: "center", color: "#475569" }}>No tasks in this range.</td></tr>
+                    <tr><td colSpan={10} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -419,49 +421,49 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d1117", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#e2e8f0" }}>
+    <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
       {nav}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px 24px" }}>
+      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
 
-        {/* KPI cards */}
+        {/* Page heading */}
+        <h1 style={{ margin: "0 0 4px 0", fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Cleaner Scorecard</h1>
+        <p style={{ margin: "0 0 18px 0", fontSize: 13, color: "#6b7280" }}>
+          Every cleaner scored by on-time rate, cleanliness rating, and refund exposure.
+          {meta && !loading && (
+            <> &nbsp;·&nbsp; {meta.fromDate} → {meta.toDate} &nbsp;·&nbsp; {meta.taskCount.toLocaleString()} tasks &nbsp;·&nbsp; {meta.reviewCount} reviews
+            {lastSyncedStr && <> &nbsp;·&nbsp; Last synced {lastSyncedStr}</>}</>
+          )}
+        </p>
+
+        {/* KPI chips row */}
         {!loading && kpiRows.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
             {[
-              { label: "Cleaners", value: kpiRows.length, render: (v: number) => v.toLocaleString() },
+              { label: "Cleaners", value: kpiRows.length, render: (v: number) => String(v) },
               { label: "Total Cleans", value: kpiRows.reduce((s, r) => s + r.total_cleans, 0), render: (v: number) => v.toLocaleString() },
               { label: "Avg On-time", value: kpiOnTime, render: (v: number | null) => pct(v), color: rateColor(kpiOnTime) },
               { label: "Avg Cleanliness", value: kpiCleanliness, render: (v: number | null) => v == null ? "—" : v.toFixed(2), color: scoreColor(kpiCleanliness) },
               { label: "Reviews", value: kpiRows.reduce((s, r) => s + r.review_count, 0), render: (v: number) => v.toLocaleString() },
               { label: "Properties", value: kpiRows.reduce((s, r) => s + r.property_count, 0), render: (v: number) => v.toLocaleString() },
             ].map(({ label, value, render, color }) => (
-              <div key={label} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "12px 16px" }}>
-                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+              <div key={label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                <div style={{ fontSize: 22, fontWeight: 700, color: color || "#ffffff", lineHeight: 1 }}>{(render as (v: any) => string)(value)}</div>
+                <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{(render as (v: any) => string)(value)}</span>
               </div>
             ))}
           </div>
         )}
 
-        {error && <div style={{ marginBottom: 16, padding: "12px 16px", background: "#2d1515", border: "1px solid #7f1d1d", borderRadius: 8, color: "#f87171", fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, color: "#dc2626", fontSize: 13 }}>{error}</div>}
 
-        <div style={{ background: "#161b27", borderRadius: 10, border: "1px solid #1e2736", overflow: "hidden" }}>
-          {meta && !loading && (
-            <div style={{ padding: "8px 16px", borderBottom: "1px solid #1e2736", display: "flex", gap: 12, fontSize: 11, color: "#475569", flexWrap: "wrap", alignItems: "center" }}>
-              <span>{meta.fromDate} → {meta.toDate}</span>
-              <span>·</span><span>{meta.taskCount.toLocaleString()} tasks</span>
-              <span>·</span><span>{meta.reviewCount} reviews</span>
-              {lastSyncedStr && <><span>·</span><span>Last synced {lastSyncedStr}</span></>}
-              <span style={{ marginLeft: "auto", color: "#334155", fontSize: 10 }}>Click a row to drill down</span>
-            </div>
-          )}
-
-          {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#475569", fontSize: 14 }}>Loading…</div>}
+        <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#9ca3af", fontSize: 14 }}>Loading…</div>}
 
           {!loading && rows.length === 0 && !error && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", gap: 8 }}>
-              <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>No cleaner data for this range.</p>
-              <p style={{ color: "#475569", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
+              <p style={{ color: "#6b7280", fontSize: 14, margin: 0 }}>No cleaner data for this range.</p>
+              <p style={{ color: "#9ca3af", fontSize: 12, margin: 0 }}>Run the breezeway-tasks cron to populate data.</p>
             </div>
           )}
 
@@ -469,7 +471,7 @@ export default function Dashboard() {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: "#0d1117" }}>
+                  <tr style={{ background: "#1e2a3a" }}>
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
                     <Th k="on_time_rate" label="On-time %" />
@@ -484,29 +486,29 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map(row => (
+                  {visibleRows.map((row, i) => (
                     <tr key={row.vendor_name}
                       onClick={() => { setDrillCleaner(row); setFilterCleaner(row.vendor_name); }}
-                      style={{ borderBottom: "1px solid #1e2736", cursor: "pointer" }}
-                      onMouseEnter={e => (e.currentTarget.style.background = "#1e2736")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontWeight: 600, color: "#e2e8f0" }}>{row.vendor_name}</div>
-                        <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
+                      style={{ borderBottom: "1px solid #f1f5f9", cursor: "pointer", background: i % 2 === 0 ? "#ffffff" : "#fafbfc" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#eef2ff")}
+                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
+                      <td style={{ padding: "11px 14px" }}>
+                        <div style={{ fontWeight: 600, color: "#1e2a3a" }}>{row.vendor_name}</div>
+                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
                       </td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#94a3b8", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 600 }}>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 700 }}>
                         {pct(row.on_time_rate)}
-                        <span style={{ color: "#475569", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>
+                        <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>
                       </td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: scoreColor(row.cleanliness_score), fontWeight: row.cleanliness_score != null ? 600 : 400 }}>{fmtScore(row.cleanliness_score)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{row.review_count || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{fmtTime(row.median_time)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#475569", fontWeight: row.tasks_overdue > 0 ? 600 : 400 }}>{row.tasks_overdue || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#475569", fontWeight: row.refund_count > 0 ? 600 : 400 }}>{row.refund_count || "—"}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: row.refund_amount > 0 ? "#dc2626" : "#475569", fontWeight: row.refund_amount > 0 ? 600 : 400 }}>{fmtMoney(row.refund_amount)}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "right", color: "#64748b" }}>{row.property_count}</td>
-                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: scoreColor(row.cleanliness_score), fontWeight: row.cleanliness_score != null ? 700 : 400 }}>{fmtScore(row.cleanliness_score)}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: "#6b7280" }}>{row.review_count || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: "#6b7280" }}>{fmtTime(row.median_time)}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: row.tasks_overdue > 0 ? "#dc2626" : "#9ca3af", fontWeight: row.tasks_overdue > 0 ? 700 : 400 }}>{row.tasks_overdue || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: row.refund_count > 0 ? "#dc2626" : "#9ca3af", fontWeight: row.refund_count > 0 ? 700 : 400 }}>{row.refund_count || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: row.refund_amount > 0 ? "#dc2626" : "#9ca3af", fontWeight: row.refund_amount > 0 ? 700 : 400 }}>{fmtMoney(row.refund_amount)}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: "#6b7280" }}>{row.property_count}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "center" }}>
                         <span style={{ width: 10, height: 10, borderRadius: "50%", background: rateColor(row.on_time_rate), display: "inline-block" }} />
                       </td>
                     </tr>
@@ -516,6 +518,12 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {!loading && rows.length > 0 && (
+          <div style={{ marginTop: 8, fontSize: 11, color: "#9ca3af", textAlign: "right" }}>
+            {visibleRows.length} cleaners &nbsp;·&nbsp; Click a row to drill down
+          </div>
+        )}
       </div>
     </div>
   );
