@@ -4,6 +4,21 @@ import { buildScorecardData } from "@/lib/scorecard";
 
 export const dynamic = "force-dynamic";
 
+// Supabase PostgREST caps rows at 1000 per request — paginate to get all records.
+async function fetchAllRows(baseQuery) {
+  const PAGE = 1000;
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await baseQuery.range(from, from + PAGE - 1);
+    if (error) return { data: null, error };
+    all = all.concat(data || []);
+    if (!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return { data: all, error: null };
+}
+
 // Returns scorecard data for a given market (or all) + date range.
 // Query params:
 //   market  = branson | deep_creek | poconos | all  (default: all)
@@ -22,13 +37,14 @@ export async function GET(req) {
   const supabase = getSupabase();
 
   const [tasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes, vendorMapRes] = await Promise.all([
-    supabase
-      .from("breezeway_tasks")
-      .select("*")
-      .in("market", markets)
-      .gte("scheduled_date", fromDate)
-      .lte("scheduled_date", toDate)
-      .limit(10000),
+    fetchAllRows(
+      supabase
+        .from("breezeway_tasks")
+        .select("*")
+        .in("market", markets)
+        .gte("scheduled_date", fromDate)
+        .lte("scheduled_date", toDate)
+    ),
 
     // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
     (() => {
