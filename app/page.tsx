@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -170,6 +171,39 @@ function exportCSV(cleaner: Row, meta: Meta | null) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const router = useRouter();
+
+  // Parse logged-in user from session cookie (base64url.sig format set by login API)
+  const currentUser = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const match = document.cookie.match(/(?:^|;\s*)ops_session=([^;]+)/);
+    if (!match) return null;
+    try {
+      const [data] = match[1].split(".");
+      return JSON.parse(Buffer.from(data, "base64").toString());
+    } catch { return null; }
+  }, []);
+
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showUserMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showUserMenu]);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
   const [market, setMarket] = useState("all");
   const [filterCleaner, setFilterCleaner] = useState("all");
   const [rangeDays, setRangeDays] = useState(90);
@@ -188,7 +222,7 @@ export default function Dashboard() {
   type OpsUser = { id: string; name: string; email: string; role: string; markets: string[] };
   const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
-  const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[] } | null>(null);
+  const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[]; password: string } | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
@@ -207,10 +241,12 @@ export default function Dashboard() {
   async function saveUser() {
     if (!userForm) return;
     const isNew = !editingUserId;
+    const payload = { ...userForm };
+    if (!payload.password) delete (payload as { password?: string }).password;
     const res = await fetch("/api/users", {
       method: isNew ? "POST" : "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isNew ? userForm : { id: editingUserId, ...userForm }),
+      body: JSON.stringify(isNew ? payload : { id: editingUserId, ...payload }),
     });
     if (res.ok) { setUserForm(null); setEditingUserId(null); loadUsers(); }
   }
@@ -359,12 +395,43 @@ export default function Dashboard() {
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
-        <button style={{ padding: 6, border: "none", background: "transparent", color: "#64748b", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Account">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </button>
+        <div ref={userMenuRef} style={{ position: "relative" }}>
+          <button onClick={() => setShowUserMenu(v => !v)} style={{
+            width: 32, height: 32, borderRadius: "50%", border: "none",
+            background: currentUser ? "#4f7c6b" : "#334155",
+            color: "#ffffff", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }} title={currentUser?.name || "Account"}>
+            {currentUser
+              ? currentUser.name.split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase()
+              : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              )
+            }
+          </button>
+          {showUserMenu && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 8px)", right: 0, width: 200,
+              background: "#ffffff", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+              border: "1px solid #e5e7eb", zIndex: 200, overflow: "hidden",
+            }}>
+              {currentUser && (
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid #f3f4f6" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{currentUser.name}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{currentUser.email}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize", marginTop: 2 }}>{currentUser.role}</div>
+                </div>
+              )}
+              <button onClick={logout} style={{
+                width: "100%", padding: "10px 14px", border: "none", background: "none",
+                textAlign: "left", fontSize: 13, color: "#dc2626", cursor: "pointer", fontWeight: 500,
+              }}>Sign out</button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
@@ -696,7 +763,7 @@ export default function Dashboard() {
 
                       {/* Actions */}
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <button onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, role: u.role, markets: u.markets || [] }); }}
+                        <button onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, role: u.role, markets: u.markets || [], password: "" }); }}
                           style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #d1d5db", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#374151" }}>Edit</button>
                         <button onClick={() => deleteUser(u.id)}
                           style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#dc2626" }}>Remove</button>
@@ -706,7 +773,7 @@ export default function Dashboard() {
 
                   {/* Add user button */}
                   {!userForm && (
-                    <button onClick={() => { setEditingUserId(null); setUserForm({ name: "", email: "", role: "employee", markets: [] }); }}
+                    <button onClick={() => { setEditingUserId(null); setUserForm({ name: "", email: "", role: "employee", markets: [], password: "" }); }}
                       style={{
                         marginTop: 4, width: "100%", padding: "10px", border: "1px dashed #d1d5db",
                         borderRadius: 10, background: "transparent", color: "#6b7280", fontSize: 13,
@@ -741,6 +808,18 @@ export default function Dashboard() {
                         <option value="employee">Employee</option>
                         <option value="vendor">Vendor</option>
                       </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>
+                        {editingUserId ? "New Password" : "Password"}
+                      </label>
+                      <input
+                        type="password"
+                        value={userForm.password}
+                        onChange={e => setUserForm(f => f && ({ ...f, password: e.target.value }))}
+                        placeholder={editingUserId ? "Leave blank to keep current" : "Set password"}
+                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
+                      />
                     </div>
                     <div>
                       <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Markets</label>
