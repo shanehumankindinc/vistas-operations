@@ -10,6 +10,10 @@ export const dynamic = "force-dynamic";
 // ?market=branson|deep_creek|poconos  (default: branson)
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
+  const secret = searchParams.get("secret");
+  if (secret !== process.env.CRON_SECRET) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const market = searchParams.get("market") || "branson";
 
   const supabase = getSupabase();
