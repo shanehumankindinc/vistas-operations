@@ -74,6 +74,22 @@ export async function GET(req) {
         allRows.push(...batchResults.flat());
       }
 
+      // Auto-detect individual → company mapping from the assignments array.
+      // When a company account "accepts" a task, its assignment has type_task_user_status="accepted".
+      // The individual who finishes it is in finished_by.name.
+      // So: finished_by.name (individual) → accepted assignment name (company).
+      const detectedCompany = {};
+      for (const t of allRows) {
+        const individual = t.finished_by?.name || t.assigned_to;
+        if (!individual || isExcludedVendor(individual)) continue;
+        const accepted = (t.assignments || []).find(
+          (a) => a.type_task_user_status === "accepted" && a.name && a.name !== individual
+        );
+        if (accepted?.name) {
+          detectedCompany[individual] = accepted.name;
+        }
+      }
+
       // Build rows for upsert
       const rows = [];
       for (const t of allRows) {
@@ -109,18 +125,26 @@ export async function GET(req) {
         }
       }
 
-      // Auto-register any new vendor names into vendor_map (excluded=false, no company_name)
-      // so they appear in the scorecard immediately and can be mapped/excluded later.
-      const newVendors = [...new Set(rows.map((r) => r.vendor_name).filter(Boolean))].map((name) => ({
-        market,
-        individual_name: name,
-        excluded: false,
-        first_seen: new Date().toISOString().slice(0, 10),
-      }));
-      if (newVendors.length > 0) {
-        await supabase
-          .from("vendor_map")
-          .upsert(newVendors, { onConflict: "market,individual_name", ignoreDuplicates: true });
+      // Upsert vendor_map: insert new vendors, and update company_name where currently null.
+      // Uses COALESCE so a manually-set company_name is never overwritten by auto-detection.
+      const today = new Date().toISOString().slice(0, 10);
+      const uniqueNames = [...new Set(rows.map((r) => r.vendor_name).filter(Boolean))];
+      for (const name of uniqueNames) {
+        const company = detectedCompany[name] || null;
+        // Insert if new (ignore if exists)
+        await supabase.from("vendor_map").upsert(
+          { market, individual_name: name, company_name: company, excluded: false, first_seen: today },
+          { onConflict: "market,individual_name", ignoreDuplicates: true }
+        );
+        // If auto-detected a company, fill in company_name only where it's still null
+        if (company) {
+          await supabase
+            .from("vendor_map")
+            .update({ company_name: company })
+            .eq("market", market)
+            .eq("individual_name", name)
+            .is("company_name", null);
+        }
       }
 
       results[market] = {
