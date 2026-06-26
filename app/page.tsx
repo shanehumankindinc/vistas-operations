@@ -23,6 +23,7 @@ type EnrichedTask = {
   task_id: string;
   scheduled_date: string;
   property_name: string | null;
+  individual_name: string | null;
   task_title: string | null;
   is_finished: boolean;
   finished_at: string | null;
@@ -137,13 +138,14 @@ function NavSelect({ value, onChange, options }: {
 
 function exportCSV(cleaner: Row, meta: Meta | null) {
   const tasks = (cleaner.enriched_tasks || []).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
-  const headers = ["Sched Date", "Property", "Status", "Finished (CST)", "On Time?", "Deadline Type", "Deadline", "Duration (min)", "Cleanliness", "Review", "Refund?"];
+  const headers = ["Sched Date", "Property", "Crew", "Status", "Finished (CST)", "On Time?", "Deadline Type", "Deadline", "Duration (min)", "Cleanliness", "Review", "Refund?"];
   const csvRows = [headers, ...tasks.map(t => {
     const finishedStr = t.finished_cst ? `${t.finished_cst.dateStr} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} CST` : "";
     const refundAmt = t.linked_refunds.reduce((s, r) => s + r.refund_amount, 0);
     return [
       t.scheduled_date,
       t.property_name || "",
+      t.individual_name || "",
       !t.decided ? "Scheduled" : t.is_finished ? "Completed" : "Overdue",
       finishedStr,
       !t.decided ? "—" : t.on_time ? "Yes" : "No",
@@ -179,6 +181,7 @@ export default function Dashboard() {
   const [sortAsc, setSortAsc] = useState(false);
   // Drill-down: null = summary view, Row = detail view for that cleaner
   const [drillCleaner, setDrillCleaner] = useState<Row | null>(null);
+  const [filterCrew, setFilterCrew] = useState("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,9 +211,21 @@ export default function Dashboard() {
     ...rows.map(r => ({ key: r.vendor_name, label: r.vendor_name })).sort((a, b) => a.label.localeCompare(b.label)),
   ], [rows]);
 
+  const crewOptions = useMemo(() => {
+    const names = [
+      ...new Set(
+        (drillCleaner?.enriched_tasks || [])
+          .map((t: EnrichedTask) => t.individual_name)
+          .filter(Boolean)
+      ),
+    ].sort() as string[];
+    return [{ key: "all", label: "All Crew" }, ...names.map(n => ({ key: n, label: n }))];
+  }, [drillCleaner]);
+
   // When cleaner dropdown changes, either clear drill-down or open it
   function handleCleanerSelect(name: string) {
     setFilterCleaner(name);
+    setFilterCrew("all");
     if (name !== "all") {
       const row = rows.find(r => r.vendor_name === name) || null;
       setDrillCleaner(row);
@@ -246,7 +261,7 @@ export default function Dashboard() {
   const nav = (
     <nav style={{ background: "#0f172a", borderBottom: "1px solid #1e293b", padding: "0 24px", display: "flex", alignItems: "center", height: 52, gap: 0 }}>
       {drillCleaner ? (
-        <button onClick={() => { setDrillCleaner(null); setFilterCleaner("all"); }} style={{
+        <button onClick={() => { setDrillCleaner(null); setFilterCleaner("all"); setFilterCrew("all"); }} style={{
           padding: "4px 12px", border: "1px solid #334155", borderRadius: 6, background: "transparent",
           color: "#94a3b8", fontSize: 12, cursor: "pointer", marginRight: 20, display: "flex", alignItems: "center", gap: 6,
         }}>
@@ -264,7 +279,15 @@ export default function Dashboard() {
         </>
       )}
       {drillCleaner && (
-        <span style={{ fontWeight: 700, fontSize: 15, color: "#ffffff" }}>{drillCleaner.vendor_name}</span>
+        <>
+          <span style={{ fontWeight: 700, fontSize: 15, color: "#ffffff" }}>{drillCleaner.vendor_name}</span>
+          {crewOptions.length > 2 && (
+            <>
+              <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
+              <NavSelect value={filterCrew} onChange={setFilterCrew} options={crewOptions} />
+            </>
+          )}
+        </>
       )}
       <div style={{ flex: 1 }} />
       {drillCleaner && (
@@ -294,7 +317,8 @@ export default function Dashboard() {
 
   if (drillCleaner) {
     const c = drillCleaner;
-    const tasks = (c.enriched_tasks || []).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
+    const allTasks = (c.enriched_tasks || []).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
+    const tasks = filterCrew === "all" ? allTasks : allTasks.filter(t => t.individual_name === filterCrew);
     const dateLabel = meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : "";
 
     function Chip({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
@@ -341,7 +365,7 @@ export default function Dashboard() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#1e2a3a" }}>
-                    {["Sched Date", "Property", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
+                    {["Sched Date", "Property", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
                       <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -370,6 +394,7 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.individual_name || "—"}</td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: statusColor, fontWeight: 600 }}>{statusLabel}</td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "#6b7280" }}>{finishedStr || "—"}</td>
                         <td style={{ padding: "9px 12px", textAlign: "center" }}>
@@ -394,7 +419,7 @@ export default function Dashboard() {
                     );
                   })}
                   {tasks.length === 0 && (
-                    <tr><td colSpan={10} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
+                    <tr><td colSpan={11} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
                   )}
                 </tbody>
               </table>

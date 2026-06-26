@@ -116,6 +116,7 @@ export async function GET(req) {
 
       return {
         ...t,
+        individual_name: t.vendor_name,
         vendor_name: displayName,
         listing_id: t.listing_id || (propKey ? nicknameToListingId[propKey] : null) || null,
       };
