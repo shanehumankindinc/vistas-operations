@@ -183,6 +183,47 @@ export default function Dashboard() {
   const [drillCleaner, setDrillCleaner] = useState<Row | null>(null);
   const [filterCrew, setFilterCrew] = useState("all");
 
+  // Settings drawer
+  const [showSettings, setShowSettings] = useState(false);
+  type OpsUser = { id: string; name: string; email: string; role: string; markets: string[] };
+  const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[] } | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    setSettingsLoading(true);
+    try {
+      const res = await fetch("/api/users");
+      const json = await res.json();
+      setOpsUsers(json.users || []);
+    } finally {
+      setSettingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { if (showSettings) loadUsers(); }, [showSettings, loadUsers]);
+
+  async function saveUser() {
+    if (!userForm) return;
+    const isNew = !editingUserId;
+    const res = await fetch("/api/users", {
+      method: isNew ? "POST" : "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(isNew ? userForm : { id: editingUserId, ...userForm }),
+    });
+    if (res.ok) { setUserForm(null); setEditingUserId(null); loadUsers(); }
+  }
+
+  async function deleteUser(id: string) {
+    if (!confirm("Remove this user?")) return;
+    await fetch(`/api/users?id=${id}`, { method: "DELETE" });
+    loadUsers();
+  }
+
+  const MARKET_LABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
+  const ROLE_COLORS: Record<string, string> = { admin: "#6366f1", employee: "#0ea5e9", vendor: "#64748b" };
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -312,7 +353,7 @@ export default function Dashboard() {
       </div>
       <span style={{ width: 1, height: 20, background: "#334155", margin: "0 12px", flexShrink: 0 }} />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button style={{ padding: 6, border: "none", background: "transparent", color: "#64748b", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
+        <button onClick={() => setShowSettings(true)} style={{ padding: 6, border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -578,6 +619,162 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* ─── Settings Drawer ─────────────────────────────────────────────────── */}
+      {showSettings && (
+        <>
+          {/* Backdrop */}
+          <div onClick={() => { setShowSettings(false); setUserForm(null); setEditingUserId(null); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} />
+
+          {/* Drawer panel */}
+          <div style={{
+            position: "fixed", top: 0, right: 0, bottom: 0, width: 560, background: "#ffffff",
+            zIndex: 101, display: "flex", flexDirection: "column", boxShadow: "-8px 0 32px rgba(0,0,0,0.18)",
+          }}>
+            {/* Header */}
+            <div style={{ padding: "20px 28px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>Settings</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Admin only</div>
+              </div>
+              <button onClick={() => { setShowSettings(false); setUserForm(null); setEditingUserId(null); }}
+                style={{ border: "none", background: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }}>×</button>
+            </div>
+
+            {/* Section title */}
+            <div style={{ padding: "20px 28px 0" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Users &amp; Permissions</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+                Manage who has access. Assign markets per user. Vendors can only see their assigned market.
+              </div>
+            </div>
+
+            {/* User list */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 28px" }}>
+              {settingsLoading ? (
+                <div style={{ color: "#9ca3af", fontSize: 13, padding: "20px 0" }}>Loading…</div>
+              ) : (
+                <>
+                  {opsUsers.map(u => (
+                    <div key={u.id} style={{
+                      display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
+                      border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 10, background: "#f9fafb",
+                    }}>
+                      {/* Avatar */}
+                      <div style={{
+                        width: 40, height: 40, borderRadius: "50%", background: "#1e293b",
+                        color: "#fff", fontWeight: 700, fontSize: 14,
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}>
+                        {u.name.split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{u.name}</div>
+                        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 1 }}>{u.email}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                          {(u.markets || []).map((m: string) => (
+                            <span key={m} style={{
+                              fontSize: 11, fontWeight: 500, padding: "2px 8px",
+                              background: "#e0f2fe", color: "#0369a1", borderRadius: 99,
+                            }}>{MARKET_LABELS[m] || m}</span>
+                          ))}
+                          {(!u.markets || u.markets.length === 0) && (
+                            <span style={{ fontSize: 11, color: "#9ca3af" }}>No markets assigned</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Role badge */}
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99,
+                        background: ROLE_COLORS[u.role] + "22", color: ROLE_COLORS[u.role],
+                        textTransform: "capitalize", flexShrink: 0,
+                      }}>{u.role}</span>
+
+                      {/* Actions */}
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, role: u.role, markets: u.markets || [] }); }}
+                          style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #d1d5db", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#374151" }}>Edit</button>
+                        <button onClick={() => deleteUser(u.id)}
+                          style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#dc2626" }}>Remove</button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add user button */}
+                  {!userForm && (
+                    <button onClick={() => { setEditingUserId(null); setUserForm({ name: "", email: "", role: "employee", markets: [] }); }}
+                      style={{
+                        marginTop: 4, width: "100%", padding: "10px", border: "1px dashed #d1d5db",
+                        borderRadius: 10, background: "transparent", color: "#6b7280", fontSize: 13,
+                        cursor: "pointer", fontWeight: 500,
+                      }}>+ Add User</button>
+                  )}
+                </>
+              )}
+
+              {/* Add / Edit form */}
+              {userForm && (
+                <div style={{ border: "1px solid #c7d2fe", borderRadius: 10, padding: 20, marginTop: 10, background: "#f8f7ff" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 14 }}>
+                    {editingUserId ? "Edit User" : "Add User"}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Name</label>
+                      <input value={userForm.name} onChange={e => setUserForm(f => f && ({ ...f, name: e.target.value }))}
+                        placeholder="Full name" style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Email</label>
+                      <input value={userForm.email} onChange={e => setUserForm(f => f && ({ ...f, email: e.target.value }))}
+                        placeholder="email@example.com" style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Role</label>
+                      <select value={userForm.role} onChange={e => setUserForm(f => f && ({ ...f, role: e.target.value }))}
+                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, background: "#fff" }}>
+                        <option value="admin">Admin</option>
+                        <option value="employee">Employee</option>
+                        <option value="vendor">Vendor</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Markets</label>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 4 }}>
+                        {(["branson", "deep_creek", "poconos"] as const).map(mk => (
+                          <label key={mk} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                            <input type="checkbox" checked={userForm.markets.includes(mk)}
+                              onChange={e => setUserForm(f => {
+                                if (!f) return f;
+                                const ms = e.target.checked ? [...f.markets, mk] : f.markets.filter(m => m !== mk);
+                                return { ...f, markets: ms };
+                              })} />
+                            {MARKET_LABELS[mk]}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <button onClick={saveUser}
+                      style={{ padding: "7px 20px", background: "#1e293b", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                      {editingUserId ? "Save Changes" : "Add User"}
+                    </button>
+                    <button onClick={() => { setUserForm(null); setEditingUserId(null); }}
+                      style={{ padding: "7px 14px", background: "transparent", color: "#6b7280", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
