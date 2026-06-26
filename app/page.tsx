@@ -332,6 +332,19 @@ export default function Dashboard() {
 
     const totalRefundAmt = tasks.flatMap(t => t.linked_refunds).reduce((s, r) => s + r.refund_amount, 0);
 
+    // Recompute KPI stats from the (possibly crew-filtered) task list
+    const kpiCleans = tasks.length;
+    const kpiDecided = tasks.filter(t => t.decided).length;
+    const kpiOnTime = tasks.filter(t => t.decided && t.on_time).length;
+    const kpiOnTimeRate = kpiDecided > 0 ? kpiOnTime / kpiDecided : null;
+    const kpiOverdue = tasks.filter(t => t.clean_status === "Overdue").length;
+    const kpiProperties = new Set(tasks.map(t => t.property_name).filter(Boolean)).size;
+    const kpiReviews = tasks.map(t => t.review).filter(Boolean);
+    const kpiReviewsWithScore = kpiReviews.filter(r => r?.cleanliness != null);
+    const kpiCleanliness = kpiReviewsWithScore.length > 0
+      ? kpiReviewsWithScore.reduce((s, r) => s + (r?.cleanliness ?? 0), 0) / kpiReviewsWithScore.length
+      : null;
+
     return (
       <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
         {nav}
@@ -346,13 +359,13 @@ export default function Dashboard() {
 
           {/* KPI chips */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-            <Chip label="Cleans" value={c.total_cleans} />
-            <Chip label="On-time Rate" value={pct(c.on_time_rate)} color={rateColor(c.on_time_rate)} />
-            <Chip label="On-time / Cleans" value={`${c.on_time} / ${c.decided}`} />
-            <Chip label="Tasks Overdue" value={c.tasks_overdue > 0 ? c.tasks_overdue : "None"} color={c.tasks_overdue > 0 ? "#dc2626" : "#16a34a"} />
-            <Chip label="Properties" value={c.property_count} />
-            <Chip label="Cleanliness" value={fmtScore(c.cleanliness_score)} color={scoreColor(c.cleanliness_score)} />
-            <Chip label="Reviews" value={c.review_count || "None"} />
+            <Chip label="Cleans" value={kpiCleans} />
+            <Chip label="On-time Rate" value={pct(kpiOnTimeRate)} color={rateColor(kpiOnTimeRate)} />
+            <Chip label="On-time / Cleans" value={`${kpiOnTime} / ${kpiDecided}`} />
+            <Chip label="Tasks Overdue" value={kpiOverdue > 0 ? kpiOverdue : "None"} color={kpiOverdue > 0 ? "#dc2626" : "#16a34a"} />
+            <Chip label="Properties" value={kpiProperties} />
+            <Chip label="Cleanliness" value={fmtScore(kpiCleanliness)} color={scoreColor(kpiCleanliness)} />
+            <Chip label="Reviews" value={kpiReviews.length || "None"} />
             <Chip label="Refund Exposure" value={fmtMoney(totalRefundAmt)} color={totalRefundAmt > 0 ? "#dc2626" : "#16a34a"} />
           </div>
 
