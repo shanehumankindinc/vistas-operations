@@ -114,6 +114,12 @@ export async function GET(req) {
 
   const pulledDates = rawTasks.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
 
+  // Debug: per-market breakdown of raw vs filtered tasks
+  const rawByMarket = {};
+  const filteredByMarket = {};
+  for (const t of rawTasks) { rawByMarket[t.market] = (rawByMarket[t.market] || 0) + 1; }
+  for (const t of tasks)    { filteredByMarket[t.vendor_name] = (filteredByMarket[t.vendor_name] || 0) + 1; }
+
   return Response.json({
     scorecard,
     meta: {
@@ -122,6 +128,8 @@ export async function GET(req) {
       toDate,
       lastSynced: pulledDates[0] || null,
       taskCount: tasks.length,
+      rawTaskCount: rawTasks.length,
+      rawByMarket,
       reviewCount: reviews.length,
     },
   });
