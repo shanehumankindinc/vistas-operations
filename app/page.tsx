@@ -545,9 +545,9 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: scoreColor(t.review?.cleanliness ?? null), fontWeight: t.review?.cleanliness != null ? 700 : 400 }}>
                           {t.review?.cleanliness != null ? t.review.cleanliness.toFixed(1) : "—"}
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#6b7280", maxWidth: 300 }}>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", maxWidth: 320, minWidth: 160 }}>
                           {reviewText
-                            ? <span title={reviewText} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reviewText}</span>
+                            ? <span style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", lineHeight: "1.4", fontSize: 13 }}>{reviewText}</span>
                             : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: refundAmt > 0 ? "#dc2626" : "#d1d5db", fontWeight: refundAmt > 0 ? 700 : 400 }}>
