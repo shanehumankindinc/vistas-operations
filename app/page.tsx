@@ -41,6 +41,7 @@ type EnrichedTask = {
   review: { cleanliness: number | null; submitted_at: string; review_text?: string } | null;
   linked_refunds: { refund_amount: number; refund_reason: string }[];
   linked_issues: LinkedIssue[];
+  cleaner_feedback: string | null;
 };
 
 type Row = {
@@ -58,6 +59,7 @@ type Row = {
   refund_amount: number;
   property_count: number;
   median_time: number | null;
+  feedback_count: number;
   enriched_tasks?: EnrichedTask[];
 };
 
@@ -498,6 +500,7 @@ export default function Dashboard() {
             <Chip label="Properties" value={kpiProperties} />
             <Chip label="Cleanliness" value={fmtScore(kpiCleanliness)} color={scoreColor(kpiCleanliness)} />
             <Chip label="Reviews" value={kpiReviews.length || "None"} />
+            <Chip label="GS Feedback" value={tasks.filter(t => t.cleaner_feedback).length || "None"} color={tasks.filter(t => t.cleaner_feedback).length > 0 ? "#7c3aed" : undefined} />
             <Chip label="Refund Exposure" value={fmtMoney(totalRefundAmt)} color={totalRefundAmt > 0 ? "#dc2626" : "#16a34a"} />
           </div>
 
@@ -510,7 +513,7 @@ export default function Dashboard() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: "#1e2a3a" }}>
-                    {["Sched Date", "Property", "Task", "Issues", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Refund?"].map(h => (
+                    {["Sched Date", "Property", "Task", "Issues", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Feedback", "Refund?"].map(h => (
                       <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -561,6 +564,11 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#6b7280", minWidth: 200 }}>
                           {reviewText
                             ? <span style={{ display: "block", lineHeight: "1.5", fontSize: 13, wordBreak: "break-word" }}>{reviewText}</span>
+                            : <span style={{ color: "#d1d5db" }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 12px", color: "#7c3aed", minWidth: 180 }}>
+                          {t.cleaner_feedback
+                            ? <span style={{ display: "block", lineHeight: "1.5", fontSize: 12, wordBreak: "break-word" }}>{t.cleaner_feedback}</span>
                             : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: refundAmt > 0 ? "#dc2626" : "#d1d5db", fontWeight: refundAmt > 0 ? 700 : 400 }}>
@@ -652,6 +660,7 @@ export default function Dashboard() {
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
                     <Th k="issues_created" label="Issues" />
+                    <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>Feedback</th>
                     <Th k="on_time_rate" label="On-time %" />
                     <Th k="cleanliness_score" label="Cleanliness" />
                     <Th k="review_count" label="Reviews" />
@@ -676,6 +685,7 @@ export default function Dashboard() {
                       </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: (row.issues_created || 0) > 0 ? "#16a34a" : "#9ca3af", fontWeight: (row.issues_created || 0) > 0 ? 700 : 400 }}>{row.issues_created || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right", color: (row.feedback_count || 0) > 0 ? "#7c3aed" : "#9ca3af", fontWeight: (row.feedback_count || 0) > 0 ? 700 : 400 }}>{row.feedback_count || "—"}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 700 }}>
                         {pct(row.on_time_rate)}
                         <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 11, marginLeft: 4 }}>{row.on_time}/{row.decided}</span>

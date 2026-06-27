@@ -77,7 +77,7 @@ export async function GET(req) {
 
     supabase
       .from("guesty_checkins")
-      .select("listing_id, check_in_date")
+      .select("listing_id, check_in_date, cleaner_feedback, confirmation_code")
       .in("market", markets)
       .gte("check_in_date", fromDate)
       .lte("check_in_date", toDate),
