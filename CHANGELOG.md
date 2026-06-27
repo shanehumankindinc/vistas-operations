@@ -4,6 +4,14 @@
 
 ## 2026-06-27
 
+### Feat: Capture description, summary, and comments on maintenance tasks
+**Files:** `app/api/cron/breezeway-tasks/route.js`, `app/api/admin/run-bz-sync/route.js`
+**Migration:** `add_description_summary_comments_to_breezeway_tasks`
+
+BZ's `/inventory/v1/task` list endpoint already returns these fields inline — no extra API calls needed. Added three nullable columns to `breezeway_tasks`: `description text`, `summary text`, `comments jsonb`. The sync now maps them from the BZ response for maintenance tasks only. Run a manual re-sync to backfill existing rows.
+
+---
+
 ### Fix: Issues column always showing 0
 **File:** `app/api/data/route.js`
 

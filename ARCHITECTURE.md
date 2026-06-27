@@ -65,6 +65,9 @@ One row per Breezeway task. Upserted by the sync routes using `task_id,market` a
 | `clean_status` | BZ status string |
 | `is_finished` | Boolean |
 | `pulled_at` | When the sync last touched this row |
+| `description` | Task description text (maintenance tasks only) |
+| `summary` | Primary task note from BZ `summary.note` (maintenance tasks only) |
+| `comments` | JSONB array of `{ id, comment, comment_by, created_at }` (maintenance tasks only) |
 
 ### `vendor_map`
 Maps individual cleaner names → company names, and flags excluded vendors.
