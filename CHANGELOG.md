@@ -2,6 +2,32 @@
 
 ---
 
+## 2026-06-27 (continued)
+
+### Feat: GS Cleaner Feedback wired for all three markets
+**Files:** `lib/markets.js`, `lib/scorecard.js`, `app/api/data/route.js`, `app/page.tsx`
+
+Field IDs discovered by calling `GET /v1/accounts/{accountId}/custom-fields` via the Open API using cached KV tokens. IDs confirmed live:
+
+| Market | `cleanerFeedbackFieldId` | `refundReasonFieldId` |
+|---|---|---|
+| Branson | `69efa455004a8900145395f4` (unchanged) | `69e92df43e89c40010c58025` (unchanged) |
+| Deep Creek | `6a20d2b46ab284001357b7f0` (was wrong Branson ID) | `6a20d2e3f908c8001480d65a` (was null) |
+| Poconos | `6a20d20ef1ce860013b6c54c` (was null) | `6a20d1fe9e162b001339a9a9` (was null) |
+
+`data/route.js` now selects `cleaner_feedback, confirmation_code` from `guesty_checkins`. `buildEnrichedTasks` in `scorecard.js` indexes checkins by `listing_id:check_in_date` and attaches `cleaner_feedback` to each enriched task. `buildScorecardData` computes `feedback_count` per vendor row.
+
+UI: Feedback column added to main scorecard table (count, purple). GS Feedback chip + Feedback text column added to cleaner drill-down view.
+
+**Note:** The `guesty_checkins` cron already writes `cleaner_feedback` for Branson; with the correct field IDs now in `markets.js`, the next cron run will start populating DC and Poconos feedback too.
+
+### Fix: Re-add auth to debug route
+**File:** `app/api/admin/debug/route.js`
+
+Debug endpoint was temporarily left without auth during field ID discovery. Auth restored — requires `CRON_SECRET` as Bearer token or `?secret=` query param.
+
+---
+
 ## 2026-06-27
 
 ### Feat: Capture description, summary, and comments on maintenance tasks
