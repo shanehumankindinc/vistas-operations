@@ -36,7 +36,7 @@ export async function GET(req) {
   const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
   const supabase = getSupabase();
 
-  const [tasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes, vendorMapRes] = await Promise.all([
+  const [tasksRes, maintTasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes, vendorMapRes] = await Promise.all([
     fetchAllRows(
       supabase
         .from("breezeway_tasks")
@@ -44,6 +44,18 @@ export async function GET(req) {
         .in("market", markets)
         .gte("scheduled_date", fromDate)
         .lte("scheduled_date", toDate)
+    ),
+
+    // Maintenance tasks have no scheduled_date — fetch by created_at window instead.
+    // These are issue reports from cleaners, linked to clean rows by property + date proximity.
+    fetchAllRows(
+      supabase
+        .from("breezeway_tasks")
+        .select("*")
+        .in("market", markets)
+        .eq("task_type", "maintenance")
+        .gte("created_at", fromDate)
+        .lte("created_at", toDate + "T23:59:59Z")
     ),
 
     // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
@@ -98,14 +110,23 @@ export async function GET(req) {
     }
   }
 
+  // Merge maintenance tasks (fetched by created_at) into the main task list.
+  // Dedupe by task_id in case any overlap with the scheduled-date query.
   const rawTasks = tasksRes.data || [];
-  const tasks = rawTasks
+  const seenTaskIds = new Set(rawTasks.map((t) => t.task_id));
+  const maintOnly = (maintTasksRes.data || []).filter((t) => !seenTaskIds.has(t.task_id));
+  const allRawTasks = [...rawTasks, ...maintOnly];
+
+  const tasks = allRawTasks
     .map((t) => {
       const mapKey = `${t.market}:${t.vendor_name}`;
       const entry = vendorLookup[mapKey];
 
-      // Exclude if flagged in vendor_map
-      if (entry?.excluded) return null;
+      // Maintenance tasks must always pass through — their creator is what the scorecard needs.
+      const isMaintTask = (t.task_type || "").toLowerCase().includes("maintenance");
+
+      // Exclude non-maintenance tasks flagged in vendor_map
+      if (!isMaintTask && entry?.excluded) return null;
 
       // Apply company_name alias if mapped; otherwise use individual name as-is
       const displayName = entry?.company_name || t.vendor_name;
@@ -129,13 +150,13 @@ export async function GET(req) {
 
   const scorecard = buildScorecardData({ tasks, reviews, refunds, checkIns, startDate: fromDate, endDate: toDate });
 
-  const pulledDates = rawTasks.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
+  const pulledDates = allRawTasks.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
 
   // Debug: per-market breakdown of raw vs filtered tasks
   const rawByMarket = {};
   const filteredByMarket = {};
-  for (const t of rawTasks) { rawByMarket[t.market] = (rawByMarket[t.market] || 0) + 1; }
-  for (const t of tasks)    { filteredByMarket[t.vendor_name] = (filteredByMarket[t.vendor_name] || 0) + 1; }
+  for (const t of allRawTasks) { rawByMarket[t.market] = (rawByMarket[t.market] || 0) + 1; }
+  for (const t of tasks)       { filteredByMarket[t.vendor_name] = (filteredByMarket[t.vendor_name] || 0) + 1; }
 
   return Response.json({
     scorecard,
@@ -145,7 +166,8 @@ export async function GET(req) {
       toDate,
       lastSynced: pulledDates[0] || null,
       taskCount: tasks.length,
-      rawTaskCount: rawTasks.length,
+      rawTaskCount: allRawTasks.length,
+      maintTaskCount: maintOnly.length,
       rawByMarket,
       reviewCount: reviews.length,
     },
