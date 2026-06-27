@@ -89,5 +89,38 @@ export async function GET(req) {
     out.guesty_error = e.message;
   }
 
+  // --- Guesty custom field IDs for DC and Poconos ---
+  // Fetch one recent reservation per market with customFields to find gs_cleaner_feedback field ID
+  for (const market of ["deep_creek", "poconos"]) {
+    try {
+      const token = await kv.get(MARKETS[market].kvKey);
+      if (!token) throw new Error(`No Guesty token in KV for ${market}`);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const from = new Date(); from.setDate(from.getDate() - 30);
+      const fromStr = from.toISOString().slice(0, 10);
+
+      const res = await fetch(
+        `https://open-api.guesty.com/v1/reservations?checkInDateFrom=${fromStr}&checkInDateTo=${today}&limit=5&fields=confirmationCode,customFields`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+      );
+      const data = await res.json();
+      const reservations = data.results || data.data || [];
+      const allFields = reservations.flatMap(r => r.customFields || []);
+      const feedbackField = allFields.find(f =>
+        (f.fieldName || "").toLowerCase().includes("cleaner") ||
+        (f.varName || "").includes("gs_cleaner")
+      );
+      out[`guesty_custom_fields_${market}`] = {
+        status: res.status,
+        reservations_checked: reservations.length,
+        all_field_ids: [...new Map(allFields.map(f => [f.fieldId, { fieldId: f.fieldId, fieldName: f.fieldName, varName: f.varName }])).values()],
+        cleaner_feedback_field: feedbackField || null,
+      };
+    } catch (e) {
+      out[`guesty_custom_fields_${market}`] = { error: e.message };
+    }
+  }
+
   return Response.json(out);
 }
