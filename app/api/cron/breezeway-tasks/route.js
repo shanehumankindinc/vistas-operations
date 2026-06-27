@@ -130,6 +130,12 @@ export async function GET(req) {
           is_finished:    !!t.finished_at,
           assigned_count: t.assignments?.length || 0,
           pulled_at:      new Date().toISOString(),
+          // Maintenance-task detail fields (already inline on the BZ task object)
+          ...(isMaintTask && {
+            description: t.description || null,
+            summary:     t.summary?.note || null,
+            comments:    t.comments?.length ? t.comments : null,
+          }),
         });
       }
 
