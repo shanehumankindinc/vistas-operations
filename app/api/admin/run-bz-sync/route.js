@@ -9,7 +9,13 @@ export const dynamic = "force-dynamic";
 // callable via browser with a secret query param.
 // GET /api/admin/run-bz-sync?secret=CRON_SECRET&market=branson  (market optional, default: all)
 export async function GET(req) {
+  const authHeader = req.headers.get("authorization");
   const { searchParams } = new URL(req.url);
+  const secret = searchParams.get("secret");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && secret !== process.env.CRON_SECRET) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const marketParam = searchParams.get("market") || "all";
   const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
 
