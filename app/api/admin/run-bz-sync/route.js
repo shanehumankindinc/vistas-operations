@@ -111,13 +111,16 @@ export async function GET(req) {
 
       const rows = [];
       for (const t of allRows) {
-        const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
-        if (isExcludedVendor(vendorName)) continue;
-
         const createdBy = t.created_by?.name || t.created_by?.display_name ||
           (typeof t.created_by === "string" ? t.created_by : null);
         const taskType = t.type_department || t.task_type || t.type || null;
         const taskTitle = t.name || t.task_title || t.title || null;
+
+        const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
+        const isMaintTask = (taskType || "").toLowerCase().includes("maintenance") ||
+          (taskType || "").toLowerCase().includes("issue");
+        // Keep maintenance tasks regardless of vendor — their creator is what matters
+        if (!isMaintTask && isExcludedVendor(vendorName)) continue;
 
         rows.push({
           task_id:        String(t.id),

@@ -101,18 +101,16 @@ export async function GET(req) {
       // Build rows for upsert
       const rows = [];
       for (const t of allRows) {
-        const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
-        if (isExcludedVendor(vendorName)) continue;
-
-        // Resolve created_by — Breezeway may return an object or a string
         const createdBy = t.created_by?.name || t.created_by?.display_name ||
           (typeof t.created_by === "string" ? t.created_by : null);
-
-        // Resolve task type — Breezeway uses type_department, not task_type
         const taskType = t.type_department || t.task_type || t.type || null;
-
-        // Resolve task title — Breezeway uses name, not task_title
         const taskTitle = t.name || t.task_title || t.title || null;
+
+        const vendorName = t.finished_by?.name || t.assigned_to || "Unassigned";
+        const isMaintTask = (taskType || "").toLowerCase().includes("maintenance") ||
+          (taskType || "").toLowerCase().includes("issue");
+        // Keep maintenance tasks regardless of vendor — their creator is what matters
+        if (!isMaintTask && isExcludedVendor(vendorName)) continue;
 
         rows.push({
           task_id:        String(t.id),
