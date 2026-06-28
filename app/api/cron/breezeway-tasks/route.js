@@ -86,14 +86,10 @@ export async function GET(req) {
       // When a company account "accepts" a task, its assignment has type_task_user_status="accepted".
       // The individual who finishes it is in finished_by.name.
       // So: finished_by.name (individual) → accepted assignment name (company).
-      const individualId = {}; // individual name → BZ person ID (for People API lookup)
       const detectedCompany = {};
       for (const t of allRows) {
         const individual = t.finished_by?.name || t.assigned_to;
         if (!individual || isExcludedVendor(individual)) continue;
-        if (t.finished_by?.id && !individualId[individual]) {
-          individualId[individual] = t.finished_by.id;
-        }
         const accepted = (t.assignments || []).find(
           (a) => a.type_task_user_status === "accepted" && a.name && a.name !== individual
         );
@@ -154,44 +150,42 @@ export async function GET(req) {
         }
       }
 
-      // Upsert vendor_map: insert new vendors, and update company_name where currently null.
-      // Uses ignoreDuplicates so a manually-set company_name or excluded flag is never overwritten.
+      // Fetch the full BZ internal people list for this market (one call).
+      // Anyone in this list — active OR deactivated (laid off) — is internal staff
+      // and should be excluded from the cleaner scorecard.
+      const bzToken = await getBzToken(market);
+      const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
+      const internalPeople = new Set();
+      try {
+        let peoplePage = 1;
+        while (true) {
+          const res = await fetch(
+            `https://api.breezeway.io/public/inventory/v1/people?limit=100&page=${peoplePage}`,
+            { headers: bzHeaders }
+          );
+          if (!res.ok) break;
+          const body = await res.json().catch(() => null);
+          const people = Array.isArray(body) ? body : (body?.results || body?.data || []);
+          for (const p of people) {
+            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim().toLowerCase();
+            if (fullName) internalPeople.add(fullName);
+          }
+          if (people.length < 100) break;
+          peoplePage++;
+        }
+      } catch { /* non-fatal — if People list fails, proceed without auto-exclude */ }
+
+      // Upsert vendor_map: insert new vendors with correct excluded status,
+      // and update company_name where currently null.
       const todayStr = new Date().toISOString().slice(0, 10);
       const uniqueNames = [...new Set(rows.map((r) => r.vendor_name).filter(v => v && !isExcludedVendor(v)))];
 
-      // Find which individuals are new (not yet in vendor_map for this market)
-      const { data: existingVendors } = await supabase
-        .from("vendor_map")
-        .select("individual_name")
-        .eq("market", market);
-      const knownNames = new Set((existingVendors || []).map(v => v.individual_name));
-      const newNames = uniqueNames.filter(name => !knownNames.has(name));
-
-      // For each new individual, call BZ People API to determine if they are internal staff.
-      // 200 → person exists in this BZ account's internal directory (staff/admin) → auto-exclude
-      // 404 → external vendor account (not in internal directory) → keep on scorecard
-      const excludedByPeople = {};
-      if (newNames.length > 0) {
-        const bzToken = await getBzToken(market);
-        const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
-        await Promise.all(newNames.map(async (name) => {
-          const personId = individualId[name];
-          if (!personId) return;
-          try {
-            const res = await fetch(
-              `https://api.breezeway.io/public/inventory/v1/people/${personId}`,
-              { headers: bzHeaders }
-            );
-            excludedByPeople[name] = res.status === 200;
-          } catch { /* non-fatal — default to not excluded */ }
-        }));
-      }
-
       for (const name of uniqueNames) {
         const company = detectedCompany[name] || null;
-        const excluded = excludedByPeople[name] || false;
+        const isInternal = internalPeople.has(name.toLowerCase());
+        // ignoreDuplicates: existing rows are never overwritten (preserves manual overrides)
         await supabase.from("vendor_map").upsert(
-          { market, individual_name: name, company_name: company, excluded, first_seen: todayStr },
+          { market, individual_name: name, company_name: company, excluded: isInternal, first_seen: todayStr },
           { onConflict: "market,individual_name", ignoreDuplicates: true }
         );
         if (company) {
@@ -204,14 +198,37 @@ export async function GET(req) {
         }
       }
 
+      // Retroactively exclude any existing vendor_map entries whose name now appears
+      // in the BZ people list — catches laid-off employees and pre-existing staff entries
+      // that were inserted before this logic existed (e.g. Brandon Bennett, Linda Norwood).
+      let retroExcluded = 0;
+      if (internalPeople.size > 0) {
+        const { data: allVendors } = await supabase
+          .from("vendor_map")
+          .select("individual_name")
+          .eq("market", market)
+          .eq("excluded", false);
+        const toExclude = (allVendors || [])
+          .map((v) => v.individual_name)
+          .filter((name) => internalPeople.has(name.toLowerCase()));
+        if (toExclude.length > 0) {
+          await supabase
+            .from("vendor_map")
+            .update({ excluded: true })
+            .eq("market", market)
+            .in("individual_name", toExclude);
+          retroExcluded = toExclude.length;
+        }
+      }
+
       results[market] = {
         bz_props_in_account: bzProps.length,
         properties_used: properties.length,
         tasks_fetched: allRows.length,
         upserted,
         property_errors: errors,
-        new_vendors_checked: newNames.length,
-        new_vendors_auto_excluded: Object.values(excludedByPeople).filter(Boolean).length,
+        internal_people_in_bz: internalPeople.size,
+        retro_excluded: retroExcluded,
       };
     } catch (err) {
       results[market] = { error: err.message };
