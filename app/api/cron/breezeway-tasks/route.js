@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/db";
-import { fetchAllBzPropertiesForMarket, fetchBzTasksForProperty, fetchBzMaintenanceTasksForProperty } from "@/lib/breezeway";
+import { getBzToken, fetchAllBzPropertiesForMarket, fetchBzTasksForProperty, fetchBzMaintenanceTasksForProperty } from "@/lib/breezeway";
 import { MARKET_KEYS, isExcludedVendor } from "@/lib/markets";
 
 export const maxDuration = 300;
@@ -86,10 +86,14 @@ export async function GET(req) {
       // When a company account "accepts" a task, its assignment has type_task_user_status="accepted".
       // The individual who finishes it is in finished_by.name.
       // So: finished_by.name (individual) → accepted assignment name (company).
+      const individualId = {}; // individual name → BZ person ID (for People API lookup)
       const detectedCompany = {};
       for (const t of allRows) {
         const individual = t.finished_by?.name || t.assigned_to;
         if (!individual || isExcludedVendor(individual)) continue;
+        if (t.finished_by?.id && !individualId[individual]) {
+          individualId[individual] = t.finished_by.id;
+        }
         const accepted = (t.assignments || []).find(
           (a) => a.type_task_user_status === "accepted" && a.name && a.name !== individual
         );
@@ -151,17 +155,45 @@ export async function GET(req) {
       }
 
       // Upsert vendor_map: insert new vendors, and update company_name where currently null.
-      // Uses COALESCE so a manually-set company_name is never overwritten by auto-detection.
-      const today = new Date().toISOString().slice(0, 10);
-      const uniqueNames = [...new Set(rows.map((r) => r.vendor_name).filter(Boolean))];
+      // Uses ignoreDuplicates so a manually-set company_name or excluded flag is never overwritten.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const uniqueNames = [...new Set(rows.map((r) => r.vendor_name).filter(v => v && !isExcludedVendor(v)))];
+
+      // Find which individuals are new (not yet in vendor_map for this market)
+      const { data: existingVendors } = await supabase
+        .from("vendor_map")
+        .select("individual_name")
+        .eq("market", market);
+      const knownNames = new Set((existingVendors || []).map(v => v.individual_name));
+      const newNames = uniqueNames.filter(name => !knownNames.has(name));
+
+      // For each new individual, call BZ People API to determine if they are internal staff.
+      // 200 → person exists in this BZ account's internal directory (staff/admin) → auto-exclude
+      // 404 → external vendor account (not in internal directory) → keep on scorecard
+      const excludedByPeople = {};
+      if (newNames.length > 0) {
+        const bzToken = await getBzToken(market);
+        const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
+        await Promise.all(newNames.map(async (name) => {
+          const personId = individualId[name];
+          if (!personId) return;
+          try {
+            const res = await fetch(
+              `https://api.breezeway.io/public/inventory/v1/people/${personId}`,
+              { headers: bzHeaders }
+            );
+            excludedByPeople[name] = res.status === 200;
+          } catch { /* non-fatal — default to not excluded */ }
+        }));
+      }
+
       for (const name of uniqueNames) {
         const company = detectedCompany[name] || null;
-        // Insert if new (ignore if exists)
+        const excluded = excludedByPeople[name] || false;
         await supabase.from("vendor_map").upsert(
-          { market, individual_name: name, company_name: company, excluded: false, first_seen: today },
+          { market, individual_name: name, company_name: company, excluded, first_seen: todayStr },
           { onConflict: "market,individual_name", ignoreDuplicates: true }
         );
-        // If auto-detected a company, fill in company_name only where it's still null
         if (company) {
           await supabase
             .from("vendor_map")
@@ -178,6 +210,8 @@ export async function GET(req) {
         tasks_fetched: allRows.length,
         upserted,
         property_errors: errors,
+        new_vendors_checked: newNames.length,
+        new_vendors_auto_excluded: Object.values(excludedByPeople).filter(Boolean).length,
       };
     } catch (err) {
       results[market] = { error: err.message };
