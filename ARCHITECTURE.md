@@ -38,6 +38,9 @@ Each market has its own Breezeway account and (for Branson/Deep Creek/Poconos) i
 
 ### Supabase
 - All persisted data. Connection via `lib/db.js → getSupabase()`.
+- `lib/db.js` uses the **service role key** (`SUPABASE_SERVICE_ROLE_KEY`) — server-side only, bypasses RLS by design.
+- RLS is enabled on all tables with a default-deny policy for the anon role. The anon key has no read or write access.
+- Never use `SUPABASE_ANON_KEY` in this project. Never use `NEXT_PUBLIC_SUPABASE_*` env vars (they would expose credentials to the browser).
 
 ### Upstash (Redis/KV)
 - URL: `https://clever-bluegill-8498.upstash.io`
@@ -91,7 +94,7 @@ Populated by the `branson-dashboard` project's crons. Read-only from this app.
 app/
   api/
     data/route.js             ← Main scorecard data endpoint (GET /api/data)
-    admin/run-bz-sync/        ← Manual BZ sync trigger (no auth currently — TODO)
+    admin/run-bz-sync/        ← Manual BZ sync trigger (requires CRON_SECRET as Bearer or ?secret=)
     cron/breezeway-tasks/     ← Scheduled daily BZ sync (5am UTC)
 lib/
   breezeway.js                ← BZ API client + token management
@@ -132,4 +135,6 @@ lib/
 - **BZ `type_department` field** is the source of truth for task type, not `task_type`. The sync normalizes it into `task_type` in the DB.
 - **`created_by` is an object**, not a string: `{ name, display_name }`. Always resolve as `t.created_by?.name || t.created_by?.display_name`.
 - **Branson BZ token**: only the `branson-dashboard` cron may call OAuth2. Everything else reads from KV.
-- **`run-bz-sync` endpoint** currently has no auth. Needs `CRON_SECRET` check added (same pattern as the cron route).
+- **`run-bz-sync` endpoint** requires `CRON_SECRET` as a Bearer token (`Authorization: Bearer SECRET`) or query param (`?secret=SECRET`). Auth is enforced at the route level; this path is in the middleware bypass list so Vercel can reach it without a session cookie.
+- **Middleware verifies JWT signatures** — it uses Web Crypto (`crypto.subtle`) to recompute the HMAC-SHA256 of the session cookie and reject any forged or expired tokens. The secret is `AUTH_SECRET` env var (required in Vercel — never use the hardcoded fallback in production).
+- **Cron routes bypass middleware** — `/api/cron/*` is in the middleware bypass list. The routes themselves verify `CRON_SECRET` as a Bearer token.

@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-06-28: Security hardening — auth and Supabase access
+
+What changed: Middleware now verifies the HMAC-SHA256 signature of the `ops_session` cookie instead of only checking that the cookie exists. `lib/db.js` switched from the anon key to the service role key. Cron routes added to the middleware bypass list so Vercel cron jobs can reach their handlers.
+
+Why: The cookie-existence-only check was a complete authentication bypass — anyone could set `ops_session=anything` in dev tools and access all data. RLS is disabled on Supabase tables, so switching to the service role key (the correct server-side credential) and enabling RLS with default-deny protects the database even if credentials leak.
+
+Operational follow-ups:
+- `SUPABASE_SERVICE_ROLE_KEY` must be added to Vercel env vars for this project before the next deployment works.
+- `AUTH_SECRET` must be set in Vercel (confirm it is not using the hardcoded fallback `vistas-ops-dev-secret-2026` which is visible in the public GitHub repo).
+- RLS must be enabled on all Supabase tables (`breezeway_tasks`, `vendor_map`, `guesty_reviews`, `guesty_refunds`, `guesty_checkins`, `guesty_properties`, `ops_users`) with a default-deny policy for the anon role. Do this AFTER the deployment is green.
+- All active sessions will be invalidated on deploy (users log in once and it works normally after).
+
+---
+
 ## 2026-06-27 (continued)
 
 ### Feat: GS Cleaner Feedback wired for all three markets
