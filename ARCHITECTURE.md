@@ -83,8 +83,30 @@ Maps individual cleaner names → company names, and flags excluded vendors.
 | `excluded` | If true, that vendor's tasks are dropped from the scorecard |
 | `first_seen` | Date the individual first appeared in a sync |
 
-### `guesty_reviews`, `guesty_refunds`, `guesty_checkins`, `guesty_properties`
-Populated by the `branson-dashboard` project's crons. Read-only from this app.
+### `guesty_reviews`
+Populated by `cron/guesty-sync`. Key columns for review matching:
+
+| Column | Notes |
+|--------|-------|
+| `listing_id` | Guesty listing ID — matches `breezeway_tasks.bz_property_id` |
+| `reservation_id` | Guesty reservation MongoDB ObjectID (`r.reservationId`) — matches `guesty_checkins.reservation_id` for exact match |
+| `submitted_at` | Date review was submitted (date-only) |
+| `confirmation_code` | Channel booking code (`r.externalReservationId`, e.g. Airbnb HMXXXXXXXX) — NOT the same as `guesty_checkins.confirmation_code` |
+
+### `guesty_checkins`
+Populated by `cron/checkins`. Contains upcoming reservations (check-in from today onwards — Guesty API only returns future/current check-ins via the date filter).
+
+| Column | Notes |
+|--------|-------|
+| `reservation_id` | Guesty reservation MongoDB ObjectID (`r._id`) — matches `guesty_reviews.reservation_id` |
+| `confirmation_code` | Guesty's internal code (`r.confirmationCode`, e.g. "HA-hPMRtzJ") — NOT the same format as the channel code on reviews |
+| `check_in_date` | Guest check-in date |
+| `check_out_date` | Guest check-out date = clean task's `scheduled_date` |
+
+**Important:** `guesty_checkins` only holds FUTURE reservations. The Guesty `/v1/reservations` endpoint with date filters returns only upcoming check-ins regardless of statuses requested. Historical checkout dates are not available via this table.
+
+### `guesty_refunds`, `guesty_properties`
+Populated by `cron/guesty-sync`. Read-only from data serving paths.
 
 ---
 

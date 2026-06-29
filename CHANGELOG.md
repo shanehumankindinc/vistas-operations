@@ -2,6 +2,25 @@
 
 ---
 
+## 2026-06-29: Review match accuracy — from 54% to 98%
+
+What changed: Reviews now match to clean tasks at 98.1% (663/676) versus 53.7% (363/676) before. Three root causes were fixed:
+
+1. **Broken Guesty reservation fetch** — the `fields` param in `fetchReservationsByCheckIn` was silently stripping `checkIn`, `checkOut`, and `customFields` from all responses. Removed the param entirely; the full object is returned and we pick what we need. This also means `guesty_checkins.check_in_date` and `check_out_date` are now correctly populated for the first time.
+
+2. **Task window too narrow for review attribution** — reviews are fetched 60 days back (so late reviews for pre-window cleans are available), but tasks were only fetched for the 30-day scorecard window. Added a pre-window task query (same 60-day lookback) used exclusively for review matching. Vendor stats still only count tasks in the 30-day window.
+
+3. **Two-pass review matching** — `buildTaskReviewMap` now runs two passes: pass 1 is exact match via `reservation_id → check_out_date → task.scheduled_date`; pass 2 is the existing 1-60 day date-window heuristic. Pass 1 requires `reservation_id` on both `guesty_reviews` and `guesty_checkins` — those columns were added and are now populated by their respective syncs.
+
+Why: 313 reviews were appearing as unmatched in the dashboard even though their cleans exist in Breezeway — those cleans just happened slightly before the 30-day window. The fix adds the correct task lookback to match the review lookback that was already in place.
+
+Operational follow-ups:
+- The old `guesty_checkins` rows (pre-fix) had `_id` stored as `confirmation_code` because the fields filter was stripping the real `confirmationCode`. Those rows were deleted and repopulated correctly by re-running the checkins cron.
+- `cleaner_feedback` remains 0 in `guesty_checkins` — likely `cleanerFeedbackFieldId` is not configured or the custom field is not being filled by guests. Not related to this fix.
+- The 13 truly orphaned reviews (no clean task found in any 60-day window) are for properties with Guesty reviews but no Breezeway task — likely owner cleans or deactivated properties. Nothing to do.
+
+---
+
 ## 2026-06-28: Security hardening — auth and Supabase access
 
 What changed: Middleware now verifies the HMAC-SHA256 signature of the `ops_session` cookie instead of only checking that the cookie exists. `lib/db.js` switched from the anon key to the service role key. Cron routes added to the middleware bypass list so Vercel cron jobs can reach their handlers.
