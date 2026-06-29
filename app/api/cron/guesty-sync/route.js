@@ -64,6 +64,7 @@ export async function GET(req) {
           property_name:       r.listingId ? (listingMap[r.listingId] || null) : null,
           // externalReservationId = platform confirmation code (e.g. Airbnb HMEMXPQZ2Z).
           // Matches confirmation_code in guesty_checkins, enabling exact review→clean attribution.
+          reservation_id:      r.reservationId || null,
           confirmation_code:   r.externalReservationId || raw.reservation_confirmation_code || null,
           overall_score:       raw.overall_rating ?? null,
           cleanliness:         raw.category_ratings_cleanliness ?? null,

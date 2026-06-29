@@ -40,6 +40,7 @@ export async function GET(req) {
         }
         return {
           confirmation_code: r.confirmationCode || r._id,
+          reservation_id:    r._id || null,
           market,
           listing_id:        r.listingId || null,
           check_in_date:     r.checkIn ? r.checkIn.slice(0, 10) : null,
