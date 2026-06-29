@@ -159,8 +159,7 @@ export async function GET(req) {
         const reservations = await fetchReservationsByCheckIn(
           market,
           fromDate.toISOString().slice(0, 10),
-          today.toISOString().slice(0, 10),
-          "customFields"
+          today.toISOString().slice(0, 10)
         );
 
         const rows = [];

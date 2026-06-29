@@ -30,8 +30,7 @@ export async function GET(req) {
   for (const market of MARKET_KEYS) {
     const cfg = MARKETS[market];
     try {
-      const extraFields = cfg.cleanerFeedbackFieldId ? "customFields" : "";
-      const reservations = await fetchReservationsByCheckIn(market, fromStr, toStr, extraFields);
+      const reservations = await fetchReservationsByCheckIn(market, fromStr, toStr);
 
       const rows = reservations.map((r) => {
         let cleanerFeedback = null;
