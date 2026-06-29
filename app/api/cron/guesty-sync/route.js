@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/db";
 import { fetchAllListings, fetchAllReviews, fetchOwnersByIds, fetchReservationsByCheckIn } from "@/lib/guesty";
 import { MARKET_KEYS, MARKETS } from "@/lib/markets";
+import { computeScorecard } from "@/lib/scorecard-data";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -55,22 +56,25 @@ export async function GET(req) {
       const rows = reviews.map((r) => {
         const raw = r.rawReview || {};
         return {
-          review_id:        r._id,
+          review_id:           r._id,
           market,
-          submitted_at:     (raw.submitted_at || raw.first_completed_at || r.createdAt || "").slice(0, 10) || null,
-          channel:          r.channelId || null,
-          listing_id:       r.listingId || null,
-          property_name:    r.listingId ? (listingMap[r.listingId] || null) : null,
-          overall_score:    raw.overall_rating ?? null,
-          cleanliness:      raw.category_ratings_cleanliness ?? null,
-          accuracy:         raw.category_ratings_accuracy ?? null,
-          checkin_score:    raw.category_ratings_checkin ?? null,
-          communication:    raw.category_ratings_communication ?? null,
-          location:         raw.category_ratings_location ?? null,
-          value:            raw.category_ratings_value ?? null,
-          review_text:      raw.public_review || null,
-          private_feedback: raw.reviewee_response || null,
-          pulled_at:        new Date().toISOString(),
+          submitted_at:        (raw.submitted_at || raw.first_completed_at || r.createdAt || "").slice(0, 10) || null,
+          channel:             r.channelId || null,
+          listing_id:          r.listingId || null,
+          property_name:       r.listingId ? (listingMap[r.listingId] || null) : null,
+          // externalReservationId = platform confirmation code (e.g. Airbnb HMEMXPQZ2Z).
+          // Matches confirmation_code in guesty_checkins, enabling exact review→clean attribution.
+          confirmation_code:   r.externalReservationId || raw.reservation_confirmation_code || null,
+          overall_score:       raw.overall_rating ?? null,
+          cleanliness:         raw.category_ratings_cleanliness ?? null,
+          accuracy:            raw.category_ratings_accuracy ?? null,
+          checkin_score:       raw.category_ratings_checkin ?? null,
+          communication:       raw.category_ratings_communication ?? null,
+          location:            raw.category_ratings_location ?? null,
+          value:               raw.category_ratings_value ?? null,
+          review_text:         raw.public_review || null,
+          private_feedback:    raw.reviewee_response || null,
+          pulled_at:           new Date().toISOString(),
         };
       });
 
@@ -190,5 +194,46 @@ export async function GET(req) {
     results[market] = marketResult;
   }
 
-  return Response.json({ ok: true, results });
+  // Warm the scorecard cache for the default 30-day window.
+  // Runs after all market syncs complete so tasks (from BZ at 5am) and
+  // reviews (just synced above) are both fresh.
+  // Warms: "all markets" + each individual market, covering all dropdown options.
+  const today = new Date().toISOString().slice(0, 10);
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - 30);
+  const fromStr = fromDate.toISOString().slice(0, 10);
+
+  const cacheTargets = [
+    { key: "all", markets: MARKET_KEYS },
+    ...MARKET_KEYS.map((m) => ({ key: m, markets: [m] })),
+  ];
+
+  const cacheResults = {};
+  for (const target of cacheTargets) {
+    try {
+      const result = await computeScorecard({
+        markets: target.markets,
+        fromDate: fromStr,
+        toDate: today,
+        supabase,
+      });
+      await supabase
+        .from("scorecard_cache")
+        .upsert(
+          {
+            market: target.key,
+            from_date: fromStr,
+            to_date: today,
+            computed_at: new Date().toISOString(),
+            payload: result,
+          },
+          { onConflict: "market,from_date,to_date" }
+        );
+      cacheResults[target.key] = "ok";
+    } catch (err) {
+      cacheResults[target.key] = `error: ${err.message}`;
+    }
+  }
+
+  return Response.json({ ok: true, results, cache_warmed: cacheResults });
 }
