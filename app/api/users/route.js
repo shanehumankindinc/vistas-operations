@@ -44,14 +44,19 @@ export async function GET(req) {
   // ?directory=true returns vendor_map people with emails for the Add User picker
   if (searchParams.get("directory") === "true") {
     const [{ data: vmPeople }, { data: existingUsers }] = await Promise.all([
-      supabase.from("vendor_map").select("individual_name, email, company_name, market").not("email", "is", null).order("individual_name"),
+      supabase.from("vendor_map").select("individual_name, email, company_name, market, excluded").not("email", "is", null).order("individual_name"),
       supabase.from("ops_users").select("email"),
     ]);
     const existingEmails = new Set((existingUsers || []).map(u => u.email.toLowerCase()));
-    const directory = (vmPeople || []).map(p => ({
-      ...p,
-      already_user: existingEmails.has((p.email || "").toLowerCase()),
-    }));
+    // Deduplicate by email — same person can appear across multiple markets
+    const seen = new Set();
+    const directory = [];
+    for (const p of vmPeople || []) {
+      const key = (p.email || "").toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      directory.push({ ...p, already_user: existingEmails.has(key) });
+    }
     return Response.json({ directory });
   }
 

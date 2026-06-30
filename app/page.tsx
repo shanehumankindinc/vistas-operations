@@ -229,7 +229,7 @@ export default function Dashboard() {
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
   type OpsUser = { id: string; name: string; email: string; role: string; markets: string[]; vendor_company?: string | null };
-  type DirectoryPerson = { individual_name: string; email: string; company_name: string | null; market: string; already_user: boolean };
+  type DirectoryPerson = { individual_name: string; email: string; company_name: string | null; market: string; excluded: boolean; already_user: boolean };
   const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[]; password: string; vendor_company?: string | null } | null>(null);
@@ -286,7 +286,7 @@ export default function Dashboard() {
   }
 
   function selectDirectoryPerson(p: DirectoryPerson) {
-    const role = p.company_name ? "vendor" : "employee";
+    const role = p.excluded ? "employee" : "vendor";
     setUserForm({ name: p.individual_name, email: p.email, role, markets: [p.market], password: "", vendor_company: p.company_name || null });
     setPickerOpen(false);
   }
@@ -843,9 +843,9 @@ export default function Dashboard() {
                     const filtered = directoryPeople.filter(p =>
                       !q || p.individual_name.toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q) || (p.company_name || "").toLowerCase().includes(q)
                     );
-                    const teamPeople = filtered.filter(p => !p.company_name);
+                    const teamPeople = filtered.filter(p => p.excluded);
                     const vendorsByMarket: Record<string, DirectoryPerson[]> = {};
-                    for (const p of filtered.filter(p => p.company_name)) {
+                    for (const p of filtered.filter(p => !p.excluded)) {
                       (vendorsByMarket[p.market] = vendorsByMarket[p.market] || []).push(p);
                     }
                     const MLABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
