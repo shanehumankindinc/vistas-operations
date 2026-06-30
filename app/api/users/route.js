@@ -4,9 +4,12 @@ import { getSupabase } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 async function sendWelcomeEmail({ name, email, password }) {
-  if (!process.env.MANDRILL_API_KEY || !password) return;
+  if (!process.env.MANDRILL_API_KEY || !password) {
+    console.log("[sendWelcomeEmail] skipped — missing API key or password");
+    return;
+  }
   try {
-    await fetch("https://mandrillapp.com/api/1.0/messages/send", {
+    const res = await fetch("https://mandrillapp.com/api/1.0/messages/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -28,7 +31,11 @@ async function sendWelcomeEmail({ name, email, password }) {
         },
       }),
     });
-  } catch { /* non-fatal — user is already created */ }
+    const json = await res.json();
+    console.log("[sendWelcomeEmail] Mandrill response:", JSON.stringify(json));
+  } catch (err) {
+    console.error("[sendWelcomeEmail] error:", err?.message);
+  }
 }
 
 const SAFE_COLS = "id, name, email, role, markets, vendor_company, created_at";
