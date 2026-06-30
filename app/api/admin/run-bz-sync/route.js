@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/db";
-import { fetchAllBzPropertiesForMarket, fetchBzTasksForProperty, fetchBzMaintenanceTasksForProperty } from "@/lib/breezeway";
+import { getBzToken, fetchAllBzPropertiesForMarket, fetchBzTasksForProperty, fetchBzMaintenanceTasksForProperty } from "@/lib/breezeway";
 import { MARKET_KEYS, isExcludedVendor } from "@/lib/markets";
 
 export const maxDuration = 300;
@@ -115,6 +115,15 @@ export async function GET(req) {
         if (accepted?.name) detectedCompany[individual] = accepted.name;
       }
 
+      // Build bz_property_id → guesty listing_id map from the property list.
+      // reference_external_property_id on each BZ property IS the Guesty listing ID.
+      const bzToListingId = {};
+      for (const p of properties) {
+        const bzId = String(p.reference_property_id || p.id || "");
+        const guestyId = p.reference_external_property_id || null;
+        if (bzId && guestyId) bzToListingId[bzId] = guestyId;
+      }
+
       const rows = [];
       for (const t of allRows) {
         const createdBy = t.created_by?.name || t.created_by?.display_name ||
@@ -128,11 +137,13 @@ export async function GET(req) {
         // Keep maintenance tasks regardless of vendor — their creator is what matters
         if (!isMaintTask && isExcludedVendor(vendorName)) continue;
 
+        const bzPropId = String(t.reference_property_id || t._bzId || "");
         rows.push({
           task_id:        String(t.id),
           market,
           property_name:  t._propName || null,
-          bz_property_id: String(t.reference_property_id || t._bzId || ""),
+          bz_property_id: bzPropId,
+          listing_id:     bzToListingId[bzPropId] || null,
           vendor_name:    vendorName,
           task_title:     taskTitle,
           task_type:      taskType,
@@ -165,6 +176,38 @@ export async function GET(req) {
           upserted += chunk.length;
         }
       }
+
+      // Capture emails from the BZ people list and write to vendor_map (null-safe, never overwrites).
+      try {
+        const bzToken = await getBzToken(market);
+        const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
+        const peopleEmailMap = {};
+        let peoplePage = 1;
+        while (true) {
+          const res = await fetch(
+            `https://api.breezeway.io/public/inventory/v1/people?limit=100&page=${peoplePage}`,
+            { headers: bzHeaders }
+          );
+          if (!res.ok) break;
+          const body = await res.json().catch(() => null);
+          const people = Array.isArray(body) ? body : (body?.results || body?.data || []);
+          for (const p of people) {
+            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+            const email = Array.isArray(p.emails) ? p.emails[0] : null;
+            if (fullName && email) peopleEmailMap[fullName.toLowerCase()] = email;
+          }
+          if (people.length < 100) break;
+          peoplePage++;
+        }
+        for (const [nameLower, email] of Object.entries(peopleEmailMap)) {
+          await supabase
+            .from("vendor_map")
+            .update({ email })
+            .eq("market", market)
+            .ilike("individual_name", nameLower)
+            .is("email", null);
+        }
+      } catch { /* non-fatal */ }
 
       // Sample of maintenance tasks found — for debugging
       const maintSample = allRows
