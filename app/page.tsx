@@ -286,7 +286,7 @@ export default function Dashboard() {
   }
 
   function selectDirectoryPerson(p: DirectoryPerson) {
-    const role = p.excluded ? "employee" : "vendor";
+    const role = "vendor";
     setUserForm({ name: p.individual_name, email: p.email, role, markets: [p.market], password: "", vendor_company: p.company_name || null });
     setPickerOpen(false);
   }
@@ -843,9 +843,8 @@ export default function Dashboard() {
                     const filtered = directoryPeople.filter(p =>
                       !q || p.individual_name.toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q) || (p.company_name || "").toLowerCase().includes(q)
                     );
-                    const teamPeople = filtered.filter(p => p.excluded);
                     const vendorsByMarket: Record<string, DirectoryPerson[]> = {};
-                    for (const p of filtered.filter(p => !p.excluded)) {
+                    for (const p of filtered) {
                       (vendorsByMarket[p.market] = vendorsByMarket[p.market] || []).push(p);
                     }
                     const MLABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
@@ -857,24 +856,6 @@ export default function Dashboard() {
                           <button onClick={() => { setPickerOpen(false); setPickerSearch(""); }} style={{ border: "none", background: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
                         </div>
                         <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                          {teamPeople.length > 0 && (
-                            <>
-                              <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Team Members</div>
-                              {teamPeople.map(p => (
-                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)} disabled={p.already_user}
-                                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff", cursor: p.already_user ? "default" : "pointer", textAlign: "left", opacity: p.already_user ? 0.5 : 1 }}>
-                                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#1e293b", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    {p.individual_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
-                                  </div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.individual_name}</div>
-                                    <div style={{ fontSize: 11, color: "#6b7280" }}>{p.email}</div>
-                                  </div>
-                                  {p.already_user && <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500 }}>Added</span>}
-                                </button>
-                              ))}
-                            </>
-                          )}
                           {Object.entries(vendorsByMarket).map(([mkt, people]) => (
                             <div key={mkt}>
                               <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Vendors — {MLABELS[mkt] || mkt}</div>
