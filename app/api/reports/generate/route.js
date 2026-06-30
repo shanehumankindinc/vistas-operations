@@ -117,10 +117,12 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
 
       generated.push(vendor.vendor_name);
     } catch (err) {
+      console.error(`[reports/generate] vendor="${vendor.vendor_name}" error:`, err.message);
       errors.push({ vendor: vendor.vendor_name, error: err.message });
     }
   }
 
+  console.log(`[reports/generate] market=${market} vendors=${vendors.length} generated=${generated.length} errors=${errors.length}`);
   return Response.json({ ok: true, generated: generated.length, vendors: generated, errors });
 }
 

@@ -91,7 +91,11 @@ export default function ReportsPage() {
       if (!res.ok) {
         setGenResult("Error: " + (json.error || "Unknown error"));
       } else {
-        setGenResult(`Generated ${json.generated} report${json.generated !== 1 ? "s" : ""} for ${genMarket}.`);
+        if (json.generated === 0 && json.errors?.length > 0) {
+          setGenResult("Error: " + json.errors[0].error);
+        } else {
+          setGenResult(`Generated ${json.generated} report${json.generated !== 1 ? "s" : ""} for ${genMarket}.`);
+        }
         load();
       }
     } catch (e: any) {
