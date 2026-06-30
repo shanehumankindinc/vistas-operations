@@ -44,12 +44,30 @@ function sha256(s) {
   return createHash("sha256").update(s).digest("hex");
 }
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
+function requireAdmin(req) {
+  const user = getSessionUser(req);
+  if (user?.role !== "admin") return Response.json({ error: "Forbidden" }, { status: 403 });
+  return null;
+}
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const supabase = getSupabase();
 
   // ?directory=true returns vendor_map people with emails for the Add User picker
   if (searchParams.get("directory") === "true") {
+    const deny = requireAdmin(req);
+    if (deny) return deny;
     const [{ data: vmPeople }, { data: existingUsers }] = await Promise.all([
       supabase.from("vendor_map").select("individual_name, email, company_name, market, excluded").not("email", "is", null).order("individual_name"),
       supabase.from("ops_users").select("email"),
@@ -67,6 +85,9 @@ export async function GET(req) {
     return Response.json({ directory });
   }
 
+  const deny = requireAdmin(req);
+  if (deny) return deny;
+
   const { data, error } = await supabase
     .from("ops_users")
     .select(SAFE_COLS)
@@ -76,6 +97,8 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const body = await req.json();
   const { name, email, role, markets, vendor_company, password } = body;
   if (!name || !email || !role) {
@@ -101,6 +124,8 @@ export async function POST(req) {
 }
 
 export async function PATCH(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const body = await req.json();
   const { id, password, ...rest } = body;
   if (!id) return Response.json({ error: "id is required" }, { status: 400 });
@@ -124,6 +149,8 @@ export async function PATCH(req) {
 }
 
 export async function DELETE(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return Response.json({ error: "id is required" }, { status: 400 });

@@ -763,15 +763,20 @@ export default function Dashboard() {
                 style={{ border: "none", background: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }}>×</button>
             </div>
 
-            {/* Section title */}
-            <div style={{ padding: "20px 28px 0" }}>
+            {/* Section title — admin only */}
+            {currentUser?.role === "admin" && <div style={{ padding: "20px 28px 0" }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Users &amp; Permissions</div>
               <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
                 Manage who has access. Assign markets per user. Vendors can only see their assigned market.
               </div>
-            </div>
+            </div>}
 
-            {/* User list */}
+            {/* User list — admin only */}
+            {currentUser?.role !== "admin" ? (
+              <div style={{ flex: 1, padding: "32px 28px", color: "#6b7280", fontSize: 13 }}>
+                You can only view and edit your own account.
+              </div>
+            ) : (
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 28px" }}>
               {settingsLoading ? (
                 <div style={{ color: "#9ca3af", fontSize: 13, padding: "20px 0" }}>Loading…</div>
@@ -1009,6 +1014,7 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+            )} {/* end admin-only user list */}
           </div>
         </>
       )}
