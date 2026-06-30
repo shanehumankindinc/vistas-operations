@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-06-30: Fix gear icon — non-HttpOnly ops_ui cookie for client-side role
+
+What changed: The gear icon (Settings) now correctly appears for admin users. Root cause was that `ops_session` is an `HttpOnly` cookie, making it invisible to JavaScript — `currentUser` was always `null`, so the `role === "admin"` check always failed. Fix: login now sets a second cookie `ops_ui` (role + name only, no token) without the `HttpOnly` flag. `currentUser` in the dashboard reads `ops_ui` instead. Requires a fresh login to pick up the new cookie.
+
+Why: The `HttpOnly` flag is correct security practice for the session token, but the client genuinely needs to know the role for UI-only decisions (show/hide the gear icon).
+
+Operational follow-ups:
+- Any user who had a session before this deploy needs to log out and back in once to receive the `ops_ui` cookie.
+
+---
+
+## 2026-06-30: Maintenance tasks drill-down panel (Issues)
+
+What changed: Clicking any Issues count (scorecard column or Issues Created KPI chip) at all three levels (All Cleaners, Cleaner, Crew) opens a right-side panel showing maintenance tasks created by that vendor's crew. Panel columns: Created, Property, Task Name, Description, Status, Priority, Breezeway link. Crew filter cascades into the panel. Clicking the linked-issues count in the task table filters the panel to just those specific tasks (cross-vendor search so tasks created by a different vendor's crew still appear). Task column in the clean table truncates with ellipsis at 220px.
+
+Why: Operators needed a way to review maintenance tasks filed by cleaning vendors alongside the scorecard, without leaving the page.
+
+Operational follow-ups:
+- `priority` column in `breezeway_tasks` populates on the next 5am UTC cron run. Existing rows will show blank Priority until then.
+
+---
+
 ## 2026-06-30: Admin-only enforcement for Users & Permissions
 
 What changed: The gear icon (Settings) is now hidden entirely for non-admin users. The `/api/users` endpoints (GET, POST, PATCH, DELETE) enforce an admin check server-side — non-admins receive a 403. Previously the API had no role check and any logged-in user could read the full user list or modify accounts.
