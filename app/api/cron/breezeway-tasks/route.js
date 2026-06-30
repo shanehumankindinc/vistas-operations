@@ -98,6 +98,15 @@ export async function GET(req) {
         }
       }
 
+      // Build bz_property_id → guesty listing_id map from the property list.
+      // reference_external_property_id on each BZ property IS the Guesty listing ID.
+      const bzToListingId = {};
+      for (const p of properties) {
+        const bzId = String(p.reference_property_id || p.id || "");
+        const guestyId = p.reference_external_property_id || null;
+        if (bzId && guestyId) bzToListingId[bzId] = guestyId;
+      }
+
       // Build rows for upsert
       const rows = [];
       for (const t of allRows) {
@@ -112,11 +121,13 @@ export async function GET(req) {
         // Keep maintenance tasks regardless of vendor — their creator is what matters
         if (!isMaintTask && isExcludedVendor(vendorName)) continue;
 
+        const bzPropId = String(t.reference_property_id || t._bzId || "");
         rows.push({
           task_id:        String(t.id),
           market,
           property_name:  t._propName || null,
-          bz_property_id: String(t.reference_property_id || t._bzId || ""),
+          bz_property_id: bzPropId,
+          listing_id:     bzToListingId[bzPropId] || null,
           vendor_name:    vendorName,
           task_title:     taskTitle,
           task_type:      taskType,
@@ -150,9 +161,12 @@ export async function GET(req) {
         }
       }
 
-      // Fetch the full BZ internal people list for this market (one call).
-      // Anyone in this list — active OR deactivated (laid off) — is internal staff
-      // and should be excluded from the cleaner scorecard.
+      // Fetch the full BZ people list for this market and exclude only internal staff roles.
+      // External cleaning vendors also have BZ logins (as Representatives) so we cannot
+      // exclude everyone on the People list — only those with internal roles:
+      // Administrator, Supervisor, Office, Representative.
+      // Vendors use a different role (e.g. "Vendor" or similar) and must NOT be excluded.
+      const INTERNAL_ROLES = new Set(["administrator", "supervisor", "office", "representative"]);
       const bzToken = await getBzToken(market);
       const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
       const internalPeople = new Set();
@@ -167,6 +181,8 @@ export async function GET(req) {
           const body = await res.json().catch(() => null);
           const people = Array.isArray(body) ? body : (body?.results || body?.data || []);
           for (const p of people) {
+            const role = (p.type_role || "").toLowerCase();
+            if (!INTERNAL_ROLES.has(role)) continue;
             const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim().toLowerCase();
             if (fullName) internalPeople.add(fullName);
           }
