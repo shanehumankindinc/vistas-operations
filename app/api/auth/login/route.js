@@ -24,7 +24,7 @@ export async function POST(req) {
   const supabase = getSupabase();
   const { data: user, error } = await supabase
     .from("ops_users")
-    .select("id, name, email, role, markets, password_hash")
+    .select("id, name, email, role, markets, vendor_company, password_hash")
     .eq("email", email.toLowerCase().trim())
     .single();
 

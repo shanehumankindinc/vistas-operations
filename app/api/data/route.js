@@ -1,175 +1,87 @@
 import { getSupabase } from "@/lib/db";
 import { MARKET_KEYS } from "@/lib/markets";
-import { buildScorecardData } from "@/lib/scorecard";
+import { computeScorecard } from "@/lib/scorecard-data";
 
 export const dynamic = "force-dynamic";
 
-// Supabase PostgREST caps rows at 1000 per request — paginate to get all records.
-async function fetchAllRows(baseQuery) {
-  const PAGE = 1000;
-  let all = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await baseQuery.range(from, from + PAGE - 1);
-    if (error) return { data: null, error };
-    all = all.concat(data || []);
-    if (!data || data.length < PAGE) break;
-    from += PAGE;
-  }
-  return { data: all, error: null };
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
 }
 
-// Returns scorecard data for a given market (or all) + date range.
-// Query params:
-//   market  = branson | deep_creek | poconos | all  (default: all)
-//   from    = YYYY-MM-DD  (default: 90 days ago)
-//   to      = YYYY-MM-DD  (default: today)
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const marketParam = searchParams.get("market") || "all";
   const today = new Date().toISOString().slice(0, 10);
   const defaultFrom = new Date();
-  defaultFrom.setDate(defaultFrom.getDate() - 90);
+  defaultFrom.setDate(defaultFrom.getDate() - 30);
   const fromDate = searchParams.get("from") || defaultFrom.toISOString().slice(0, 10);
   const toDate = searchParams.get("to") || today;
 
-  const markets = marketParam === "all" ? MARKET_KEYS : [marketParam];
-  const supabase = getSupabase();
+  // Vendor enforcement: lock market to their assigned market, filter scorecard to their company
+  const sessionUser = getSessionUser(req);
+  const isVendor = sessionUser?.role === "vendor";
+  let markets = marketParam === "all" ? [...MARKET_KEYS] : [marketParam];
+  let vendorCompanyFilter = null;
 
-  const [tasksRes, maintTasksRes, reviewsRes, refundsRes, checkInsRes, propertiesRes, vendorMapRes] = await Promise.all([
-    fetchAllRows(
-      supabase
-        .from("breezeway_tasks")
-        .select("*")
-        .in("market", markets)
-        .gte("scheduled_date", fromDate)
-        .lte("scheduled_date", toDate)
-    ),
-
-    // Maintenance tasks have no scheduled_date — fetch by created_at window instead.
-    // These are issue reports from cleaners, linked to clean rows by property + date proximity.
-    fetchAllRows(
-      supabase
-        .from("breezeway_tasks")
-        .select("*")
-        .in("market", markets)
-        .eq("task_type", "maintenance")
-        .gte("created_at", fromDate)
-        .lte("created_at", toDate + "T23:59:59Z")
-    ),
-
-    // Reviews can arrive up to 60 days after the clean — fetch from 60 days before fromDate
-    (() => {
-      const reviewFrom = new Date(fromDate);
-      reviewFrom.setDate(reviewFrom.getDate() - 60);
-      return supabase
-        .from("guesty_reviews")
-        .select("*")
-        .in("market", markets)
-        .gte("submitted_at", reviewFrom.toISOString().slice(0, 10));
-    })(),
-
-    supabase
-      .from("guesty_refunds")
-      .select("*")
-      .in("market", markets)
-      .gte("check_in", fromDate),
-
-    supabase
-      .from("guesty_checkins")
-      .select("listing_id, check_in_date, cleaner_feedback, confirmation_code")
-      .in("market", markets)
-      .gte("check_in_date", fromDate)
-      .lte("check_in_date", toDate),
-
-    supabase
-      .from("guesty_properties")
-      .select("id, nickname, market")
-      .in("market", markets),
-
-    // Vendor map: individual_name → company_name + excluded flag
-    supabase
-      .from("vendor_map")
-      .select("market, individual_name, company_name, excluded")
-      .in("market", markets),
-  ]);
-
-  if (tasksRes.error) return Response.json({ error: tasksRes.error.message }, { status: 500 });
-
-  // Build vendor lookup: "market:individual_name" → { company_name, excluded }
-  const vendorLookup = {};
-  for (const v of vendorMapRes.data || []) {
-    vendorLookup[`${v.market}:${v.individual_name}`] = v;
+  if (isVendor) {
+    const vendorMarket = (sessionUser.markets || [])[0];
+    if (!vendorMarket) return Response.json({ error: "Forbidden" }, { status: 403 });
+    markets = [vendorMarket];
+    vendorCompanyFilter = sessionUser.vendor_company || null;
   }
 
-  // Build market:nickname → listing_id map
-  const nicknameToListingId = {};
-  for (const p of propertiesRes.data || []) {
-    if (p.nickname && p.id && p.market) {
-      nicknameToListingId[`${p.market}:${p.nickname.toLowerCase().trim()}`] = p.id;
+  const supabase = getSupabase();
+
+  // Cache check: only for non-vendor live-window requests
+  const isLiveWindow = toDate === today;
+  if (isLiveWindow && !isVendor) {
+    const { data: cached } = await supabase
+      .from("scorecard_cache")
+      .select("payload, computed_at")
+      .eq("market", marketParam)
+      .eq("from_date", fromDate)
+      .eq("to_date", toDate)
+      .single();
+
+    if (cached && cached.computed_at.slice(0, 10) === today) {
+      return Response.json(cached.payload);
     }
   }
 
-  // Merge maintenance tasks (fetched by created_at) into the main task list.
-  // Dedupe by task_id in case any overlap with the scheduled-date query.
-  const rawTasks = tasksRes.data || [];
-  const seenTaskIds = new Set(rawTasks.map((t) => t.task_id));
-  const maintOnly = (maintTasksRes.data || []).filter((t) => !seenTaskIds.has(t.task_id));
-  const allRawTasks = [...rawTasks, ...maintOnly];
+  let result;
+  try {
+    result = await computeScorecard({ markets, fromDate, toDate, supabase });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
 
-  const tasks = allRawTasks
-    .map((t) => {
-      const mapKey = `${t.market}:${t.vendor_name}`;
-      const entry = vendorLookup[mapKey];
+  // Write to cache for non-vendor live-window requests
+  if (isLiveWindow && !isVendor) {
+    supabase
+      .from("scorecard_cache")
+      .upsert(
+        {
+          market: marketParam,
+          from_date: fromDate,
+          to_date: toDate,
+          computed_at: new Date().toISOString(),
+          payload: result,
+        },
+        { onConflict: "market,from_date,to_date" }
+      )
+      .then(() => {});
+  }
 
-      // Maintenance tasks must always pass through — their creator is what the scorecard needs.
-      const isMaintTask = (t.task_type || "").toLowerCase().includes("maintenance");
+  // Apply vendor company filter — only their row is visible
+  if (vendorCompanyFilter && result.scorecard) {
+    result = { ...result, scorecard: result.scorecard.filter(r => r.vendor_name === vendorCompanyFilter) };
+  }
 
-      // Exclude non-maintenance tasks flagged in vendor_map
-      if (!isMaintTask && entry?.excluded) return null;
-
-      // Apply company_name alias if mapped; otherwise use individual name as-is
-      const displayName = entry?.company_name || t.vendor_name;
-
-      const propKey = t.market && t.property_name
-        ? `${t.market}:${t.property_name.toLowerCase().trim()}`
-        : null;
-
-      return {
-        ...t,
-        individual_name: t.vendor_name,
-        vendor_name: displayName,
-        listing_id: t.listing_id || (propKey ? nicknameToListingId[propKey] : null) || null,
-      };
-    })
-    .filter(Boolean);
-
-  const reviews = reviewsRes.data || [];
-  const refunds = refundsRes.data || [];
-  const checkIns = checkInsRes.data || [];
-
-  const scorecard = buildScorecardData({ tasks, reviews, refunds, checkIns, startDate: fromDate, endDate: toDate });
-
-  const pulledDates = allRawTasks.map((t) => t.pulled_at).filter(Boolean).sort().reverse();
-
-  // Debug: per-market breakdown of raw vs filtered tasks
-  const rawByMarket = {};
-  const filteredByMarket = {};
-  for (const t of allRawTasks) { rawByMarket[t.market] = (rawByMarket[t.market] || 0) + 1; }
-  for (const t of tasks)       { filteredByMarket[t.vendor_name] = (filteredByMarket[t.vendor_name] || 0) + 1; }
-
-  return Response.json({
-    scorecard,
-    meta: {
-      markets,
-      fromDate,
-      toDate,
-      lastSynced: pulledDates[0] || null,
-      taskCount: tasks.length,
-      rawTaskCount: allRawTasks.length,
-      maintTaskCount: maintOnly.length,
-      rawByMarket,
-      reviewCount: reviews.length,
-    },
-  });
+  return Response.json(result);
 }
