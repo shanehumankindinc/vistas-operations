@@ -189,7 +189,9 @@ export default function Dashboard() {
     if (!match) return null;
     try {
       const [data] = match[1].split(".");
-      return JSON.parse(Buffer.from(data, "base64").toString());
+      // Token is base64url-encoded; convert to standard base64 for native atob()
+      const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(b64));
     } catch { return null; }
   }, []);
 
