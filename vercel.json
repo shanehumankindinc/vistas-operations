@@ -11,6 +11,18 @@
     {
       "path": "/api/cron/checkins",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/reports/generate?market=branson&auto=1",
+      "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/reports/generate?market=deep_creek&auto=1",
+      "schedule": "5 9 1 * *"
+    },
+    {
+      "path": "/api/reports/generate?market=poconos&auto=1",
+      "schedule": "10 9 1 * *"
     }
   ]
 }

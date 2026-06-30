@@ -446,6 +446,9 @@ export default function Dashboard() {
         </>
       )}
       <div style={{ flex: 1 }} />
+      <a href="/reports" style={{ fontSize: 12, fontWeight: 500, color: "#64748b", textDecoration: "none", marginRight: 12, whiteSpace: "nowrap" }}>
+        Reports
+      </a>
       {drillCleaner && (
         <button onClick={() => exportCSV(drillCleaner, meta)} style={{
           padding: "5px 14px", border: "1px solid #334155", borderRadius: 6, background: "transparent",
