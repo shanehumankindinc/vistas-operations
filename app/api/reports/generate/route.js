@@ -94,7 +94,7 @@ async function runGenerate({ market, period_start, period_end, dry }, createdBy)
       const { error: uploadError } = await supabase.storage
         .from("cleaner-reports")
         .upload(filePath, Buffer.from(html, "utf-8"), {
-          contentType: "text/html;charset=utf-8",
+          contentType: "text/html",
           upsert: true,
         });
 
