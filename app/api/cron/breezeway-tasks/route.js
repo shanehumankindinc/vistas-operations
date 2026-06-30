@@ -170,7 +170,8 @@ export async function GET(req) {
       const bzToken = await getBzToken(market);
       const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
       const internalPeople = new Set();
-      const peopleEmailMap = {}; // fullName (lowercase) -> email
+      // fullName (lowercase) -> { email, lastName } for all BZ people with emails
+      const bzPeople = {};
       try {
         let peoplePage = 1;
         while (true) {
@@ -187,7 +188,7 @@ export async function GET(req) {
             if (!fullName) continue;
             if (INTERNAL_ROLES.has(role)) internalPeople.add(fullName.toLowerCase());
             const email = Array.isArray(p.emails) ? p.emails[0] : null;
-            if (email) peopleEmailMap[fullName.toLowerCase()] = email;
+            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim() };
           }
           if (people.length < 100) break;
           peoplePage++;
@@ -217,12 +218,30 @@ export async function GET(req) {
         }
       }
 
-      // Write emails onto vendor_map rows where email is currently null.
-      // Only update — never overwrite a manually-set email.
-      for (const [nameLower, email] of Object.entries(peopleEmailMap)) {
+      // Upsert all BZ people with emails into vendor_map — covers both task-finishers
+      // (already inserted above) and company-level accounts that never appear as finished_by.
+      // company_name: use last_name if it matches an existing company_name in this market
+      // (handles cases like "LNB Enterprises Eight North Cleaning Services" where last_name
+      // IS the company name). Never overwrites existing email or company_name.
+      const { data: existingCompanies } = await supabase
+        .from("vendor_map")
+        .select("company_name")
+        .eq("market", market)
+        .not("company_name", "is", null);
+      const knownCompanyNames = new Set((existingCompanies || []).map(r => r.company_name.toLowerCase()));
+
+      for (const [nameLower, { email, lastName }] of Object.entries(bzPeople)) {
+        const isInternal = internalPeople.has(nameLower);
+        const companyFromLastName = knownCompanyNames.has(lastName.toLowerCase()) ? lastName : null;
+        // Upsert: inserts if not present, ignores if already exists (preserves manual overrides)
+        await supabase.from("vendor_map").upsert(
+          { market, individual_name: nameLower, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
+          { onConflict: "market,individual_name", ignoreDuplicates: true }
+        );
+        // For existing rows: write email if null, company_name if null
         await supabase
           .from("vendor_map")
-          .update({ email })
+          .update({ email, ...(companyFromLastName && { company_name: companyFromLastName }) })
           .eq("market", market)
           .ilike("individual_name", nameLower)
           .is("email", null);

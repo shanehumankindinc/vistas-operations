@@ -177,11 +177,14 @@ export async function GET(req) {
         }
       }
 
-      // Capture emails from the BZ people list and write to vendor_map (null-safe, never overwrites).
+      // Upsert all BZ people with emails into vendor_map.
+      // Covers task-finishers and company-level accounts that never appear as finished_by.
       try {
         const bzToken = await getBzToken(market);
         const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
-        const peopleEmailMap = {};
+        const bzPeople = {}; // fullName (lowercase) -> { email, lastName }
+        const INTERNAL_ROLES = new Set(["administrator", "supervisor", "office", "representative"]);
+        const internalPeople = new Set();
         let peoplePage = 1;
         while (true) {
           const res = await fetch(
@@ -193,16 +196,31 @@ export async function GET(req) {
           const people = Array.isArray(body) ? body : (body?.results || body?.data || []);
           for (const p of people) {
             const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+            if (!fullName) continue;
+            if (INTERNAL_ROLES.has((p.type_role || "").toLowerCase())) internalPeople.add(fullName.toLowerCase());
             const email = Array.isArray(p.emails) ? p.emails[0] : null;
-            if (fullName && email) peopleEmailMap[fullName.toLowerCase()] = email;
+            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim() };
           }
           if (people.length < 100) break;
           peoplePage++;
         }
-        for (const [nameLower, email] of Object.entries(peopleEmailMap)) {
+        const { data: existingCompanies } = await supabase
+          .from("vendor_map")
+          .select("company_name")
+          .eq("market", market)
+          .not("company_name", "is", null);
+        const knownCompanyNames = new Set((existingCompanies || []).map(r => r.company_name.toLowerCase()));
+        const todayStr = new Date().toISOString().slice(0, 10);
+        for (const [nameLower, { email, lastName }] of Object.entries(bzPeople)) {
+          const isInternal = internalPeople.has(nameLower);
+          const companyFromLastName = knownCompanyNames.has(lastName.toLowerCase()) ? lastName : null;
+          await supabase.from("vendor_map").upsert(
+            { market, individual_name: nameLower, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
+            { onConflict: "market,individual_name", ignoreDuplicates: true }
+          );
           await supabase
             .from("vendor_map")
-            .update({ email })
+            .update({ email, ...(companyFromLastName && { company_name: companyFromLastName }) })
             .eq("market", market)
             .ilike("individual_name", nameLower)
             .is("email", null);
