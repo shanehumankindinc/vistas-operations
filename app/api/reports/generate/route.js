@@ -72,8 +72,9 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
   }
 
   const vendors = result.scorecard || [];
+  console.log(`[reports/generate] market=${market} period=${period_start}..${period_end} vendors=${vendors.length} meta=${JSON.stringify(result.meta)}`);
   if (vendors.length === 0) {
-    return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period" });
+    return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period", meta: result.meta });
   }
 
   const generated = [];

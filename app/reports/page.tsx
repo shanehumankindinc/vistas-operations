@@ -93,6 +93,8 @@ export default function ReportsPage() {
       } else {
         if (json.generated === 0 && json.errors?.length > 0) {
           setGenResult("Error: " + json.errors[0].error);
+        } else if (json.generated === 0 && json.message) {
+          setGenResult("Error: " + json.message + (json.meta ? ` (tasks: ${json.meta.taskCount})` : ""));
         } else {
           setGenResult(`Generated ${json.generated} report${json.generated !== 1 ? "s" : ""} for ${genMarket}.`);
         }
