@@ -244,6 +244,7 @@ export default function Dashboard() {
   // Issues panel
   const [showIssuesPanel, setShowIssuesPanel] = useState(false);
   const [issuesPanelVendor, setIssuesPanelVendor] = useState<string | null>(null);
+  const [issuesPanelLinkedIds, setIssuesPanelLinkedIds] = useState<Set<string> | null>(null);
 
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
@@ -354,11 +355,14 @@ export default function Dashboard() {
     const all: PanelIssue[] = baseRows.flatMap(r =>
       (r.issues || []).map(t => ({ ...t, vendor_name: r.vendor_name }))
     );
-    const filtered = filterCrew !== "all"
-      ? all.filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase())
+    const byLinked = issuesPanelLinkedIds
+      ? all.filter(t => issuesPanelLinkedIds.has(t.task_id))
       : all;
+    const filtered = filterCrew !== "all"
+      ? byLinked.filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase())
+      : byLinked;
     return filtered.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-  }, [showIssuesPanel, issuesPanelVendor, rows, filterCrew]);
+  }, [showIssuesPanel, issuesPanelVendor, issuesPanelLinkedIds, rows, filterCrew]);
 
   const crewOptions = useMemo(() => {
     const names = [
@@ -526,7 +530,7 @@ export default function Dashboard() {
 
   const issuesPanelEl = showIssuesPanel && (
     <>
-      <div onClick={() => setShowIssuesPanel(false)}
+      <div onClick={() => { setShowIssuesPanel(false); setIssuesPanelLinkedIds(null); }}
         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} />
       <div style={{
         position: "fixed", top: 0, right: 0, bottom: 0, width: "min(960px, 92vw)",
@@ -541,7 +545,7 @@ export default function Dashboard() {
               &nbsp;·&nbsp; {panelIssues.length} issue{panelIssues.length !== 1 ? "s" : ""}
             </div>
           </div>
-          <button onClick={() => setShowIssuesPanel(false)}
+          <button onClick={() => { setShowIssuesPanel(false); setIssuesPanelLinkedIds(null); }}
             style={{ border: "none", background: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }}>×</button>
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
@@ -579,10 +583,8 @@ export default function Dashboard() {
                         <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                       </td>
                       <td style={{ padding: "9px 14px", color: "#374151", whiteSpace: "nowrap" }}>{t.task_title || "—"}</td>
-                      <td style={{ padding: "9px 14px", color: "#6b7280", maxWidth: 260, fontSize: 12 }}>
-                        {t.description
-                          ? <span title={t.description} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</span>
-                          : <span style={{ color: "#d1d5db" }}>—</span>}
+                      <td style={{ padding: "9px 14px", color: "#6b7280", maxWidth: 240, fontSize: 12, wordBreak: "break-word", whiteSpace: "normal" }}>
+                        {t.description || <span style={{ color: "#d1d5db" }}>—</span>}
                       </td>
                       <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>{t.clean_status || "—"}</td>
                       <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>
@@ -656,11 +658,16 @@ export default function Dashboard() {
           <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#9ca3af" }}>Individual clean history with on-time performance, cleanliness ratings, and refund exposure.</p>
 
           {/* KPI chips */}
+          {(() => {
+            const crewIssues = filterCrew === "all"
+              ? (c.issues || [])
+              : (c.issues || []).filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase());
+            const kpiIssuesCreated = crewIssues.length;
+            return (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             <Chip label="Cleans" value={kpiCleans} />
-            <Chip label="Tasks" value={c.total_tasks || kpiCleans} />
-            <Chip label="Issues Created" value={c.issues_created || 0} color={(c.issues_created || 0) > 0 ? "#16a34a" : undefined}
-              onClick={(c.issues_created || 0) > 0 ? () => { setIssuesPanelVendor(c.vendor_name); setShowIssuesPanel(true); } : undefined} />
+            <Chip label="Issues Created" value={kpiIssuesCreated} color={kpiIssuesCreated > 0 ? "#16a34a" : undefined}
+              onClick={kpiIssuesCreated > 0 ? () => { setIssuesPanelVendor(c.vendor_name); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); } : undefined} />
             <Chip label="On-time Rate" value={pct(kpiOnTimeRate)} color={rateColor(kpiOnTimeRate)} />
             <Chip label="On-time / Cleans" value={`${kpiOnTime} / ${kpiDecided}`} />
             <Chip label="Tasks Overdue" value={kpiOverdue > 0 ? kpiOverdue : "None"} color={kpiOverdue > 0 ? "#dc2626" : "#16a34a"} />
@@ -670,6 +677,8 @@ export default function Dashboard() {
             <Chip label="GS Feedback" value={tasks.filter(t => t.cleaner_feedback).length || "None"} color={tasks.filter(t => t.cleaner_feedback).length > 0 ? "#7c3aed" : undefined} />
             <Chip label="Refund Exposure" value={fmtMoney(totalRefundAmt)} color={totalRefundAmt > 0 ? "#dc2626" : "#16a34a"} />
           </div>
+            );
+          })()}
 
           {/* Task table */}
           <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
@@ -712,7 +721,16 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 12 }}>{t.task_title || "Clean"}</td>
                         <td style={{ padding: "9px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                           {(t.linked_issues || []).length > 0
-                            ? <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 13 }}>{(t.linked_issues || []).length}</span>
+                            ? <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setIssuesPanelVendor(c.vendor_name);
+                                  setIssuesPanelLinkedIds(new Set(t.linked_issues.map(li => li.task_id)));
+                                  setShowIssuesPanel(true);
+                                }}
+                                style={{ color: "#16a34a", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline dotted" }}>
+                                {(t.linked_issues || []).length}
+                              </button>
                             : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.individual_name || "—"}</td>
@@ -803,7 +821,7 @@ export default function Dashboard() {
               const isClickable = clickable && (value as number) > 0;
               return (
                 <div key={label}
-                  onClick={isClickable ? () => { setIssuesPanelVendor(filterCleaner !== "all" ? filterCleaner : null); setShowIssuesPanel(true); } : undefined}
+                  onClick={isClickable ? () => { setIssuesPanelVendor(filterCleaner !== "all" ? filterCleaner : null); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); } : undefined}
                   style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, cursor: isClickable ? "pointer" : "default" }}>
                   <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{render(value)}</span>
@@ -863,7 +881,7 @@ export default function Dashboard() {
                       <td style={{ padding: "11px 14px", textAlign: "right" }}>
                         {(row.issues_created || 0) > 0 ? (
                           <button
-                            onClick={e => { e.stopPropagation(); setIssuesPanelVendor(row.vendor_name); setShowIssuesPanel(true); }}
+                            onClick={e => { e.stopPropagation(); setIssuesPanelVendor(row.vendor_name); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); }}
                             style={{ color: "#16a34a", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline dotted" }}>
                             {row.issues_created}
                           </button>
