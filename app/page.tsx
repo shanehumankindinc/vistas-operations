@@ -22,6 +22,19 @@ const RANGES = [
 
 type LinkedIssue = { task_id: string; title: string | null; created_by: string | null };
 
+type MaintenanceIssue = {
+  task_id: string;
+  created_at: string | null;
+  property_name: string | null;
+  task_title: string | null;
+  description: string | null;
+  clean_status: string | null;
+  priority: string | null;
+  created_by: string | null;
+};
+
+type PanelIssue = MaintenanceIssue & { vendor_name: string };
+
 type EnrichedTask = {
   task_id: string;
   scheduled_date: string;
@@ -60,7 +73,9 @@ type Row = {
   property_count: number;
   median_time: number | null;
   feedback_count: number;
+  market?: string | null;
   enriched_tasks?: EnrichedTask[];
+  issues?: MaintenanceIssue[];
 };
 
 type Meta = {
@@ -215,7 +230,7 @@ export default function Dashboard() {
 
   const [market, setMarket] = useState("all");
   const [filterCleaner, setFilterCleaner] = useState("all");
-  const [rangeDays, setRangeDays] = useState(90);
+  const [rangeDays, setRangeDays] = useState(30);
   const [rows, setRows] = useState<Row[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -226,20 +241,33 @@ export default function Dashboard() {
   const [drillCleaner, setDrillCleaner] = useState<Row | null>(null);
   const [filterCrew, setFilterCrew] = useState("all");
 
+  // Issues panel
+  const [showIssuesPanel, setShowIssuesPanel] = useState(false);
+  const [issuesPanelVendor, setIssuesPanelVendor] = useState<string | null>(null);
+
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
-  type OpsUser = { id: string; name: string; email: string; role: string; markets: string[] };
+  type OpsUser = { id: string; name: string; email: string; role: string; markets: string[]; vendor_company?: string | null };
+  type DirectoryPerson = { individual_name: string; email: string; company_name: string | null; market: string; already_user: boolean };
   const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
-  const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[]; password: string } | null>(null);
+  const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[]; password: string; vendor_company?: string | null } | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [directoryPeople, setDirectoryPeople] = useState<DirectoryPerson[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
 
   const loadUsers = useCallback(async () => {
     setSettingsLoading(true);
     try {
-      const res = await fetch("/api/users");
-      const json = await res.json();
-      setOpsUsers(json.users || []);
+      const [usersRes, dirRes] = await Promise.all([
+        fetch("/api/users"),
+        fetch("/api/users?directory=true"),
+      ]);
+      const usersJson = await usersRes.json();
+      const dirJson = await dirRes.json();
+      setOpsUsers(usersJson.users || []);
+      setDirectoryPeople(dirJson.directory || []);
     } finally {
       setSettingsLoading(false);
     }
@@ -257,7 +285,30 @@ export default function Dashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(isNew ? payload : { id: editingUserId, ...payload }),
     });
-    if (res.ok) { setUserForm(null); setEditingUserId(null); loadUsers(); }
+    if (res.ok) { setUserForm(null); setEditingUserId(null); setPickerOpen(false); setPickerSearch(""); loadUsers(); }
+  }
+
+  function openPickerOrForm() {
+    setEditingUserId(null);
+    if (directoryPeople.length > 0) {
+      setPickerOpen(true);
+      setPickerSearch("");
+    } else {
+      setUserForm({ name: "", email: "", role: "employee", markets: [], password: "", vendor_company: null });
+    }
+  }
+
+  function selectDirectoryPerson(p: DirectoryPerson) {
+    const role = p.company_name ? "vendor" : "employee";
+    setUserForm({
+      name: p.individual_name,
+      email: p.email,
+      role,
+      markets: [p.market],
+      password: "",
+      vendor_company: p.company_name || null,
+    });
+    setPickerOpen(false);
   }
 
   async function deleteUser(id: string) {
@@ -296,6 +347,18 @@ export default function Dashboard() {
     { key: "all", label: "All Cleaners" },
     ...rows.map(r => ({ key: r.vendor_name, label: r.vendor_name })).sort((a, b) => a.label.localeCompare(b.label)),
   ], [rows]);
+
+  const panelIssues = useMemo((): PanelIssue[] => {
+    if (!showIssuesPanel) return [];
+    const baseRows = issuesPanelVendor ? rows.filter(r => r.vendor_name === issuesPanelVendor) : rows;
+    const all: PanelIssue[] = baseRows.flatMap(r =>
+      (r.issues || []).map(t => ({ ...t, vendor_name: r.vendor_name }))
+    );
+    const filtered = filterCrew !== "all"
+      ? all.filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase())
+      : all;
+    return filtered.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  }, [showIssuesPanel, issuesPanelVendor, rows, filterCrew]);
 
   const crewOptions = useMemo(() => {
     const names = [
@@ -359,9 +422,17 @@ export default function Dashboard() {
             <span style={{ color: "#ffffff" }}>Vistas</span> Ops
           </span>
           <span style={{ width: 1, height: 20, background: "#1e293b", marginRight: 20, flexShrink: 0 }} />
-          <NavSelect value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
-          <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
-          <NavSelect value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
+          {currentUser?.role === "vendor" ? (
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>
+              {MARKET_LABELS[(currentUser.markets || [])[0]] || ""}
+            </span>
+          ) : (
+            <>
+              <NavSelect value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
+              <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
+              <NavSelect value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
+            </>
+          )}
         </>
       )}
       {drillCleaner && (
@@ -398,12 +469,14 @@ export default function Dashboard() {
       </div>
       <span style={{ width: 1, height: 20, background: "#334155", margin: "0 12px", flexShrink: 0 }} />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <button onClick={() => setShowSettings(true)} style={{ padding: 6, border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
+        {currentUser?.role !== "vendor" && (
+          <button onClick={() => setShowSettings(true)} style={{ padding: 6, border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        )}
         <div ref={userMenuRef} style={{ position: "relative" }}>
           <button onClick={() => setShowUserMenu(v => !v)} style={{
             width: 32, height: 32, borderRadius: "50%", border: "none",
@@ -445,6 +518,99 @@ export default function Dashboard() {
     </nav>
   );
 
+  // ─── Issues Panel ─────────────────────────────────────────────────────────────
+
+  const panelTitle = issuesPanelVendor
+    ? `${issuesPanelVendor} — Maintenance Issues`
+    : "All Vendors — Maintenance Issues";
+
+  const issuesPanelEl = showIssuesPanel && (
+    <>
+      <div onClick={() => setShowIssuesPanel(false)}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} />
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: "min(960px, 92vw)",
+        background: "#ffffff", zIndex: 101, display: "flex", flexDirection: "column",
+        boxShadow: "-8px 0 32px rgba(0,0,0,0.18)",
+      }}>
+        <div style={{ padding: "20px 28px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{panelTitle}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+              {meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : ""}
+              &nbsp;·&nbsp; {panelIssues.length} issue{panelIssues.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <button onClick={() => setShowIssuesPanel(false)}
+            style={{ border: "none", background: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {panelIssues.length === 0 ? (
+            <div style={{ padding: "48px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No maintenance issues found for this period.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#1e2a3a" }}>
+                    {(!issuesPanelVendor
+                      ? ["Company", "Reported By", "Created", "Property", "Task Name", "Description", "Status", "Priority", "Link"]
+                      : ["Created", "Property", "Task Name", "Description", "Status", "Priority", "Link"]
+                    ).map(h => (
+                      <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {panelIssues.map((t, i) => (
+                    <tr key={t.task_id || i}
+                      style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafbfc" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#eef2ff")}
+                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
+                      {!issuesPanelVendor && (
+                        <>
+                          <td style={{ padding: "9px 14px", color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{t.vendor_name || "—"}</td>
+                          <td style={{ padding: "9px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.created_by || "—"}</td>
+                        </>
+                      )}
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>
+                        {t.created_at ? fmtDate(t.created_at.slice(0, 10)) : "—"}
+                      </td>
+                      <td style={{ padding: "9px 14px", color: "#1e2a3a", fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
+                      </td>
+                      <td style={{ padding: "9px 14px", color: "#374151", whiteSpace: "nowrap" }}>{t.task_title || "—"}</td>
+                      <td style={{ padding: "9px 14px", color: "#6b7280", maxWidth: 260, fontSize: 12 }}>
+                        {t.description
+                          ? <span title={t.description} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</span>
+                          : <span style={{ color: "#d1d5db" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>{t.clean_status || "—"}</td>
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>
+                        {t.priority || <span style={{ color: "#d1d5db" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "9px 14px" }}>
+                        <a href={`https://app.breezeway.io/task/${t.task_id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ color: "#3b82f6", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                          title="Open in Breezeway">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                          <span style={{ fontSize: 12 }}>Open</span>
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
   // ─── Drill-down view ──────────────────────────────────────────────────────────
 
   if (drillCleaner) {
@@ -453,9 +619,9 @@ export default function Dashboard() {
     const tasks = filterCrew === "all" ? allTasks : allTasks.filter(t => t.individual_name === filterCrew);
     const dateLabel = meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : "";
 
-    function Chip({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
+    function Chip({ label, value, color, onClick }: { label: string; value: React.ReactNode; color?: string; onClick?: () => void }) {
       return (
-        <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div onClick={onClick} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, cursor: onClick ? "pointer" : "default" }}>
           <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: color || "#1a202c" }}>{value}</span>
         </div>
@@ -493,7 +659,8 @@ export default function Dashboard() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             <Chip label="Cleans" value={kpiCleans} />
             <Chip label="Tasks" value={c.total_tasks || kpiCleans} />
-            <Chip label="Issues Created" value={c.issues_created || 0} color={(c.issues_created || 0) > 0 ? "#16a34a" : undefined} />
+            <Chip label="Issues Created" value={c.issues_created || 0} color={(c.issues_created || 0) > 0 ? "#16a34a" : undefined}
+              onClick={(c.issues_created || 0) > 0 ? () => { setIssuesPanelVendor(c.vendor_name); setShowIssuesPanel(true); } : undefined} />
             <Chip label="On-time Rate" value={pct(kpiOnTimeRate)} color={rateColor(kpiOnTimeRate)} />
             <Chip label="On-time / Cleans" value={`${kpiOnTime} / ${kpiDecided}`} />
             <Chip label="Tasks Overdue" value={kpiOverdue > 0 ? kpiOverdue : "None"} color={kpiOverdue > 0 ? "#dc2626" : "#16a34a"} />
@@ -585,6 +752,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      {issuesPanelEl}
       </div>
     );
   }
@@ -625,18 +793,23 @@ export default function Dashboard() {
             {[
               { label: "Cleaners", value: kpiRows.length, render: (v: number) => String(v) },
               { label: "Total Cleans", value: kpiRows.reduce((s, r) => s + r.total_cleans, 0), render: (v: number) => v.toLocaleString() },
-              { label: "Issues Created", value: kpiRows.reduce((s, r) => s + (r.issues_created || 0), 0), render: (v: number) => v.toLocaleString() },
+              { label: "Issues Created", value: kpiRows.reduce((s, r) => s + (r.issues_created || 0), 0), render: (v: number) => v.toLocaleString(), clickable: true },
               { label: "Avg On-time", value: kpiOnTime, render: (v: number | null) => pct(v), color: rateColor(kpiOnTime) },
               { label: "Avg Cleanliness", value: kpiCleanliness, render: (v: number | null) => v == null ? "—" : v.toFixed(2), color: scoreColor(kpiCleanliness) },
               { label: "Reviews", value: kpiRows.reduce((s, r) => s + r.review_count, 0), render: (v: number) => v.toLocaleString() },
               { label: "Properties", value: kpiRows.reduce((s, r) => s + r.property_count, 0), render: (v: number) => v.toLocaleString() },
-            ].map(({ label, value, render, color }) => (
-              <div key={label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{(render as (v: any) => string)(value)}</span>
-              </div>
-            ))}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ].map(({ label, value, render, color, clickable }: any) => {
+              const isClickable = clickable && (value as number) > 0;
+              return (
+                <div key={label}
+                  onClick={isClickable ? () => { setIssuesPanelVendor(filterCleaner !== "all" ? filterCleaner : null); setShowIssuesPanel(true); } : undefined}
+                  style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, cursor: isClickable ? "pointer" : "default" }}>
+                  <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{render(value)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -681,10 +854,21 @@ export default function Dashboard() {
                       onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
                       <td style={{ padding: "11px 14px" }}>
                         <div style={{ fontWeight: 600, color: "#1e2a3a" }}>{row.vendor_name}</div>
-                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
+                        {row.market === "branson" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#dbeafe", color: "#1d4ed8" }}>Branson</span>}
+                        {row.market === "deep_creek" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#dcfce7", color: "#15803d" }}>Deep Creek</span>}
+                        {row.market === "poconos" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#fef3c7", color: "#b45309" }}>Poconos</span>}
+                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
                       </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
-                      <td style={{ padding: "11px 14px", textAlign: "right", color: (row.issues_created || 0) > 0 ? "#16a34a" : "#9ca3af", fontWeight: (row.issues_created || 0) > 0 ? 700 : 400 }}>{row.issues_created || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                        {(row.issues_created || 0) > 0 ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); setIssuesPanelVendor(row.vendor_name); setShowIssuesPanel(true); }}
+                            style={{ color: "#16a34a", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline dotted" }}>
+                            {row.issues_created}
+                          </button>
+                        ) : <span style={{ color: "#9ca3af" }}>—</span>}
+                      </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: (row.feedback_count || 0) > 0 ? "#7c3aed" : "#9ca3af", fontWeight: (row.feedback_count || 0) > 0 ? 700 : 400 }}>{row.feedback_count || "—"}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 700 }}>
                         {pct(row.on_time_rate)}
@@ -779,6 +963,9 @@ export default function Dashboard() {
                           {(!u.markets || u.markets.length === 0) && (
                             <span style={{ fontSize: 11, color: "#9ca3af" }}>No markets assigned</span>
                           )}
+                          {u.vendor_company && (
+                            <span style={{ fontSize: 11, color: "#6b7280", marginTop: 2, display: "block" }}>{u.vendor_company}</span>
+                          )}
                         </div>
                       </div>
 
@@ -791,7 +978,7 @@ export default function Dashboard() {
 
                       {/* Actions */}
                       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <button onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, role: u.role, markets: u.markets || [], password: "" }); }}
+                        <button onClick={() => { setEditingUserId(u.id); setPickerOpen(false); setUserForm({ name: u.name, email: u.email, role: u.role, markets: u.markets || [], password: "", vendor_company: u.vendor_company || null }); }}
                           style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #d1d5db", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#374151" }}>Edit</button>
                         <button onClick={() => deleteUser(u.id)}
                           style={{ fontSize: 12, padding: "4px 12px", border: "1px solid #fca5a5", borderRadius: 6, background: "#fff", cursor: "pointer", color: "#dc2626" }}>Remove</button>
@@ -799,15 +986,100 @@ export default function Dashboard() {
                     </div>
                   ))}
 
-                  {/* Add user button */}
-                  {!userForm && (
-                    <button onClick={() => { setEditingUserId(null); setUserForm({ name: "", email: "", role: "employee", markets: [], password: "" }); }}
+                  {/* Add user button / people picker */}
+                  {!userForm && !pickerOpen && (
+                    <button onClick={openPickerOrForm}
                       style={{
                         marginTop: 4, width: "100%", padding: "10px", border: "1px dashed #d1d5db",
                         borderRadius: 10, background: "transparent", color: "#6b7280", fontSize: 13,
                         cursor: "pointer", fontWeight: 500,
                       }}>+ Add User</button>
                   )}
+
+                  {/* People picker */}
+                  {pickerOpen && !userForm && (() => {
+                    const q = pickerSearch.toLowerCase();
+                    const filtered = directoryPeople.filter(p =>
+                      !q || p.individual_name.toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q) || (p.company_name || "").toLowerCase().includes(q)
+                    );
+                    const teamPeople = filtered.filter(p => !p.company_name);
+                    const vendorsByMarket: Record<string, DirectoryPerson[]> = {};
+                    for (const p of filtered.filter(p => p.company_name)) {
+                      (vendorsByMarket[p.market] = vendorsByMarket[p.market] || []).push(p);
+                    }
+                    const MLABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
+                    return (
+                      <div style={{ marginTop: 10, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+                        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8, background: "#f9fafb" }}>
+                          <input
+                            autoFocus
+                            placeholder="Search people…"
+                            value={pickerSearch}
+                            onChange={e => setPickerSearch(e.target.value)}
+                            style={{ flex: 1, border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 10px", fontSize: 13, outline: "none" }}
+                          />
+                          <button onClick={() => { setPickerOpen(false); setPickerSearch(""); }} style={{ border: "none", background: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+                        </div>
+                        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                          {teamPeople.length > 0 && (
+                            <>
+                              <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Team Members</div>
+                              {teamPeople.map(p => (
+                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)}
+                                  disabled={p.already_user}
+                                  style={{
+                                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
+                                    border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff",
+                                    cursor: p.already_user ? "default" : "pointer", textAlign: "left",
+                                    opacity: p.already_user ? 0.5 : 1,
+                                  }}>
+                                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#1e293b", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    {p.individual_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.individual_name}</div>
+                                    <div style={{ fontSize: 11, color: "#6b7280" }}>{p.email}</div>
+                                  </div>
+                                  {p.already_user && <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500 }}>Added</span>}
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          {Object.entries(vendorsByMarket).map(([mkt, people]) => (
+                            <div key={mkt}>
+                              <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Vendors — {MLABELS[mkt] || mkt}</div>
+                              {people.map(p => (
+                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)}
+                                  disabled={p.already_user}
+                                  style={{
+                                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
+                                    border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff",
+                                    cursor: p.already_user ? "default" : "pointer", textAlign: "left",
+                                    opacity: p.already_user ? 0.5 : 1,
+                                  }}>
+                                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#4f7c6b", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    {p.individual_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.individual_name}</div>
+                                    <div style={{ fontSize: 11, color: "#6b7280" }}>{p.email}{p.company_name ? ` · ${p.company_name}` : ""}</div>
+                                  </div>
+                                  {p.already_user && <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 500 }}>Added</span>}
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                          {filtered.length === 0 && (
+                            <div style={{ padding: "20px 14px", color: "#9ca3af", fontSize: 13, textAlign: "center" }}>No matches</div>
+                          )}
+                        </div>
+                        <button onClick={() => { setPickerOpen(false); setUserForm({ name: "", email: "", role: "employee", markets: [], password: "", vendor_company: null }); }}
+                          style={{ width: "100%", padding: "10px", border: "none", borderTop: "1px solid #e5e7eb", background: "#f9fafb", color: "#6b7280", fontSize: 12, cursor: "pointer" }}>
+                          + Add someone not listed
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
@@ -849,22 +1121,43 @@ export default function Dashboard() {
                         style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
                       />
                     </div>
-                    <div>
-                      <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Markets</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 4 }}>
-                        {(["branson", "deep_creek", "poconos"] as const).map(mk => (
-                          <label key={mk} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                            <input type="checkbox" checked={userForm.markets.includes(mk)}
-                              onChange={e => setUserForm(f => {
-                                if (!f) return f;
-                                const ms = e.target.checked ? [...f.markets, mk] : f.markets.filter(m => m !== mk);
-                                return { ...f, markets: ms };
-                              })} />
-                            {MARKET_LABELS[mk]}
-                          </label>
-                        ))}
+                    {userForm.role === "vendor" ? (
+                      <>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Market</label>
+                          <select value={userForm.markets[0] || ""} onChange={e => setUserForm(f => f && ({ ...f, markets: [e.target.value] }))}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, background: "#fff" }}>
+                            <option value="">Select market…</option>
+                            {(["branson", "deep_creek", "poconos"] as const).map(mk => (
+                              <option key={mk} value={mk}>{MARKET_LABELS[mk]}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Company</label>
+                          <input value={userForm.vendor_company || ""} onChange={e => setUserForm(f => f && ({ ...f, vendor_company: e.target.value || null }))}
+                            placeholder="Company or scorecard name" style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }} />
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 3 }}>Must match their row name in the scorecard exactly.</div>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Markets</label>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 4 }}>
+                          {(["branson", "deep_creek", "poconos"] as const).map(mk => (
+                            <label key={mk} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                              <input type="checkbox" checked={userForm.markets.includes(mk)}
+                                onChange={e => setUserForm(f => {
+                                  if (!f) return f;
+                                  const ms = e.target.checked ? [...f.markets, mk] : f.markets.filter(m => m !== mk);
+                                  return { ...f, markets: ms };
+                                })} />
+                              {MARKET_LABELS[mk]}
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
                     <button onClick={saveUser}
@@ -882,6 +1175,7 @@ export default function Dashboard() {
           </div>
         </>
       )}
+      {issuesPanelEl}
     </div>
   );
 }
