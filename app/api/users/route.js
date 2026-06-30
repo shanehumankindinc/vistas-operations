@@ -3,14 +3,91 @@ import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const SAFE_COLS = "id, name, email, role, markets, created_at";
+async function sendWelcomeEmail({ name, email, password }) {
+  if (!process.env.MANDRILL_API_KEY || !password) {
+    console.log("[sendWelcomeEmail] skipped — missing API key or password");
+    return;
+  }
+  try {
+    const res = await fetch("https://mandrillapp.com/api/1.0/messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: process.env.MANDRILL_API_KEY,
+        message: {
+          from_email: "noreply@bransonvistas.com",
+          from_name: "Vistas Operations",
+          to: [{ email, name, type: "to" }],
+          subject: "You've been added to Vistas Operations",
+          html: `<p>Hi ${name},</p>
+<p>You've been added to the <strong>Vistas Operations</strong> dashboard.</p>
+<p>
+  <strong>Login:</strong> <a href="https://vistas-operations.vercel.app/login">vistas-operations.vercel.app/login</a><br>
+  <strong>Email:</strong> ${email}<br>
+  <strong>Password:</strong> ${password}
+</p>
+<p style="color:#6b7280;font-size:12px;">Contact your admin if you need to change your password.</p>`,
+          text: `Hi ${name},\n\nYou've been added to Vistas Operations.\n\nLogin: https://vistas-operations.vercel.app/login\nEmail: ${email}\nPassword: ${password}`,
+        },
+      }),
+    });
+    const json = await res.json();
+    console.log("[sendWelcomeEmail] Mandrill response:", JSON.stringify(json));
+  } catch (err) {
+    console.error("[sendWelcomeEmail] error:", err?.message);
+  }
+}
+
+const SAFE_COLS = "id, name, email, role, markets, vendor_company, created_at";
 
 function sha256(s) {
   return createHash("sha256").update(s).digest("hex");
 }
 
-export async function GET() {
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
+function requireAdmin(req) {
+  const user = getSessionUser(req);
+  if (user?.role !== "admin") return Response.json({ error: "Forbidden" }, { status: 403 });
+  return null;
+}
+
+export async function GET(req) {
+  const { searchParams } = new URL(req.url);
   const supabase = getSupabase();
+
+  // ?directory=true returns vendor_map people with emails for the Add User picker
+  if (searchParams.get("directory") === "true") {
+    const deny = requireAdmin(req);
+    if (deny) return deny;
+    const [{ data: vmPeople }, { data: existingUsers }] = await Promise.all([
+      supabase.from("vendor_map").select("individual_name, email, company_name, market, excluded").not("email", "is", null).order("individual_name"),
+      supabase.from("ops_users").select("email"),
+    ]);
+    const existingEmails = new Set((existingUsers || []).map(u => u.email.toLowerCase()));
+    // Deduplicate by email — same person can appear across multiple markets
+    const seen = new Set();
+    const directory = [];
+    for (const p of vmPeople || []) {
+      const key = (p.email || "").toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      directory.push({ ...p, already_user: existingEmails.has(key) });
+    }
+    return Response.json({ directory });
+  }
+
+  const deny = requireAdmin(req);
+  if (deny) return deny;
+
   const { data, error } = await supabase
     .from("ops_users")
     .select(SAFE_COLS)
@@ -20,8 +97,10 @@ export async function GET() {
 }
 
 export async function POST(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const body = await req.json();
-  const { name, email, role, markets, password } = body;
+  const { name, email, role, markets, vendor_company, password } = body;
   if (!name || !email || !role) {
     return Response.json({ error: "name, email, and role are required" }, { status: 400 });
   }
@@ -31,6 +110,7 @@ export async function POST(req) {
     email: email.toLowerCase().trim(),
     role,
     markets: markets || [],
+    vendor_company: vendor_company || null,
     ...(password ? { password_hash: sha256(password) } : {}),
   };
   const { data, error } = await supabase
@@ -39,10 +119,13 @@ export async function POST(req) {
     .select(SAFE_COLS)
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
+  await sendWelcomeEmail({ name, email: insert.email, password });
   return Response.json({ user: data });
 }
 
 export async function PATCH(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const body = await req.json();
   const { id, password, ...rest } = body;
   if (!id) return Response.json({ error: "id is required" }, { status: 400 });
@@ -66,6 +149,8 @@ export async function PATCH(req) {
 }
 
 export async function DELETE(req) {
+  const deny = requireAdmin(req);
+  if (deny) return deny;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return Response.json({ error: "id is required" }, { status: 400 });

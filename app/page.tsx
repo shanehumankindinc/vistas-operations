@@ -249,7 +249,7 @@ export default function Dashboard() {
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
   type OpsUser = { id: string; name: string; email: string; role: string; markets: string[]; vendor_company?: string | null };
-  type DirectoryPerson = { individual_name: string; email: string; company_name: string | null; market: string; already_user: boolean };
+  type DirectoryPerson = { individual_name: string; email: string; company_name: string | null; market: string; excluded: boolean; already_user: boolean };
   const [opsUsers, setOpsUsers] = useState<OpsUser[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [userForm, setUserForm] = useState<{ name: string; email: string; role: string; markets: string[]; password: string; vendor_company?: string | null } | null>(null);
@@ -257,6 +257,7 @@ export default function Dashboard() {
   const [directoryPeople, setDirectoryPeople] = useState<DirectoryPerson[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setSettingsLoading(true);
@@ -289,6 +290,12 @@ export default function Dashboard() {
     if (res.ok) { setUserForm(null); setEditingUserId(null); setPickerOpen(false); setPickerSearch(""); loadUsers(); }
   }
 
+  async function deleteUser(id: string) {
+    if (!confirm("Remove this user?")) return;
+    await fetch(`/api/users?id=${id}`, { method: "DELETE" });
+    loadUsers();
+  }
+
   function openPickerOrForm() {
     setEditingUserId(null);
     if (directoryPeople.length > 0) {
@@ -300,22 +307,9 @@ export default function Dashboard() {
   }
 
   function selectDirectoryPerson(p: DirectoryPerson) {
-    const role = p.company_name ? "vendor" : "employee";
-    setUserForm({
-      name: p.individual_name,
-      email: p.email,
-      role,
-      markets: [p.market],
-      password: "",
-      vendor_company: p.company_name || null,
-    });
+    const isEmployee = p.excluded && !p.company_name;
+    setUserForm({ name: p.individual_name, email: p.email, role: isEmployee ? "employee" : "vendor", markets: isEmployee ? [] : [p.market], password: "", vendor_company: p.company_name || null });
     setPickerOpen(false);
-  }
-
-  async function deleteUser(id: string) {
-    if (!confirm("Remove this user?")) return;
-    await fetch(`/api/users?id=${id}`, { method: "DELETE" });
-    loadUsers();
   }
 
   const MARKET_LABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
@@ -475,7 +469,7 @@ export default function Dashboard() {
       </div>
       <span style={{ width: 1, height: 20, background: "#334155", margin: "0 12px", flexShrink: 0 }} />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        {currentUser?.role !== "vendor" && (
+        {currentUser?.role === "admin" && (
           <button onClick={() => setShowSettings(true)} style={{ padding: 6, border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -1024,39 +1018,28 @@ export default function Dashboard() {
                     const filtered = directoryPeople.filter(p =>
                       !q || p.individual_name.toLowerCase().includes(q) || (p.email || "").toLowerCase().includes(q) || (p.company_name || "").toLowerCase().includes(q)
                     );
-                    const teamPeople = filtered.filter(p => !p.company_name);
+                    const employeePeople = filtered.filter(p => p.excluded && !p.company_name);
                     const vendorsByMarket: Record<string, DirectoryPerson[]> = {};
-                    for (const p of filtered.filter(p => p.company_name)) {
+                    for (const p of filtered.filter(p => !p.excluded)) {
                       (vendorsByMarket[p.market] = vendorsByMarket[p.market] || []).push(p);
                     }
                     const MLABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
                     return (
                       <div style={{ marginTop: 10, border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
                         <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8, background: "#f9fafb" }}>
-                          <input
-                            autoFocus
-                            placeholder="Search people…"
-                            value={pickerSearch}
-                            onChange={e => setPickerSearch(e.target.value)}
-                            style={{ flex: 1, border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 10px", fontSize: 13, outline: "none" }}
-                          />
+                          <input autoFocus placeholder="Search people…" value={pickerSearch} onChange={e => setPickerSearch(e.target.value)}
+                            style={{ flex: 1, border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 10px", fontSize: 13, outline: "none" }} />
                           <button onClick={() => { setPickerOpen(false); setPickerSearch(""); }} style={{ border: "none", background: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
                         </div>
                         <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                          {teamPeople.length > 0 && (
+                          {employeePeople.length > 0 && (
                             <>
-                              <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Team Members</div>
-                              {teamPeople.map(p => (
-                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)}
-                                  disabled={p.already_user}
-                                  style={{
-                                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
-                                    border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff",
-                                    cursor: p.already_user ? "default" : "pointer", textAlign: "left",
-                                    opacity: p.already_user ? 0.5 : 1,
-                                  }}>
+                              <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Employees</div>
+                              {employeePeople.map(p => (
+                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)} disabled={p.already_user}
+                                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff", cursor: p.already_user ? "default" : "pointer", textAlign: "left", opacity: p.already_user ? 0.5 : 1 }}>
                                   <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#1e293b", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    {p.individual_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                                    {p.individual_name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.individual_name}</div>
@@ -1071,14 +1054,8 @@ export default function Dashboard() {
                             <div key={mkt}>
                               <div style={{ padding: "8px 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em" }}>Vendors — {MLABELS[mkt] || mkt}</div>
                               {people.map(p => (
-                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)}
-                                  disabled={p.already_user}
-                                  style={{
-                                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
-                                    border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff",
-                                    cursor: p.already_user ? "default" : "pointer", textAlign: "left",
-                                    opacity: p.already_user ? 0.5 : 1,
-                                  }}>
+                                <button key={p.email} onClick={() => !p.already_user && selectDirectoryPerson(p)} disabled={p.already_user}
+                                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", border: "none", borderBottom: "1px solid #f3f4f6", background: p.already_user ? "#f9fafb" : "#fff", cursor: p.already_user ? "default" : "pointer", textAlign: "left", opacity: p.already_user ? 0.5 : 1 }}>
                                   <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#4f7c6b", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                     {p.individual_name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
                                   </div>
@@ -1091,9 +1068,7 @@ export default function Dashboard() {
                               ))}
                             </div>
                           ))}
-                          {filtered.length === 0 && (
-                            <div style={{ padding: "20px 14px", color: "#9ca3af", fontSize: 13, textAlign: "center" }}>No matches</div>
-                          )}
+                          {filtered.length === 0 && <div style={{ padding: "20px 14px", color: "#9ca3af", fontSize: 13, textAlign: "center" }}>No matches</div>}
                         </div>
                         <button onClick={() => { setPickerOpen(false); setUserForm({ name: "", email: "", role: "employee", markets: [], password: "", vendor_company: null }); }}
                           style={{ width: "100%", padding: "10px", border: "none", borderTop: "1px solid #e5e7eb", background: "#f9fafb", color: "#6b7280", fontSize: 12, cursor: "pointer" }}>
@@ -1135,13 +1110,27 @@ export default function Dashboard() {
                       <label style={{ fontSize: 12, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>
                         {editingUserId ? "New Password" : "Password"}
                       </label>
-                      <input
-                        type="password"
-                        value={userForm.password}
-                        onChange={e => setUserForm(f => f && ({ ...f, password: e.target.value }))}
-                        placeholder={editingUserId ? "Leave blank to keep current" : "Set password"}
-                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
-                      />
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={userForm.password}
+                          onChange={e => setUserForm(f => f && ({ ...f, password: e.target.value }))}
+                          placeholder={editingUserId ? "Leave blank to keep current" : "Set password"}
+                          style={{ width: "100%", padding: "7px 36px 7px 10px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(v => !v)}
+                          style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#6b7280", lineHeight: 1 }}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          )}
+                        </button>
+                      </div>
                     </div>
                     {userForm.role === "vendor" ? (
                       <>

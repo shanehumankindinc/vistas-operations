@@ -72,6 +72,20 @@ One row per Breezeway task. Upserted by the sync routes using `task_id,market` a
 | `summary` | Primary task note from BZ `summary.note` (maintenance tasks only) |
 | `comments` | JSONB array of `{ id, comment, comment_by, created_at }` (maintenance tasks only) |
 
+### `ops_users`
+Dashboard user accounts. Managed via Settings → Users & Permissions.
+
+| Column | Notes |
+|--------|-------|
+| `id` | UUID primary key |
+| `name` | Display name |
+| `email` | Login email (lowercased) |
+| `role` | `admin` / `employee` / `vendor` |
+| `markets` | Array of market keys the user can see |
+| `vendor_company` | For vendor role: the `company_name` from `vendor_map` — used to filter scorecard rows server-side |
+| `password_hash` | SHA-256 of the plain-text password |
+| `created_at` | Timestamp |
+
 ### `vendor_map`
 Maps individual cleaner names → company names, and flags excluded vendors.
 
@@ -82,6 +96,7 @@ Maps individual cleaner names → company names, and flags excluded vendors.
 | `company_name` | Display name for the scorecard (e.g. "Brandon Buchan" → "BnB Rentals & Management") |
 | `excluded` | If true, that vendor's tasks are dropped from the scorecard |
 | `first_seen` | Date the individual first appeared in a sync |
+| `email` | Contact email — used by the Add User people picker to pre-fill the form |
 
 ### `guesty_reviews`
 Populated by `cron/guesty-sync`. Key columns for review matching:

@@ -2,6 +2,50 @@
 
 ---
 
+## 2026-06-30: Admin-only enforcement for Users & Permissions
+
+What changed: The gear icon (Settings) is now hidden entirely for non-admin users. The `/api/users` endpoints (GET, POST, PATCH, DELETE) enforce an admin check server-side — non-admins receive a 403. Previously the API had no role check and any logged-in user could read the full user list or modify accounts.
+
+Why: Employees and vendors have no reason to see or manage other users.
+
+---
+
+## 2026-06-30: Welcome email — Mandrill integration debugged and live
+
+What changed: Fixed two bugs that prevented welcome emails from sending: (1) `sendWelcomeEmail` was called without `await`, so Vercel terminated the serverless function before the Mandrill fetch completed; (2) the initial `MANDRILL_API_KEY` in Vercel was invalid (the key had been revoked after being exposed in a public GitHub commit). Added response logging to `sendWelcomeEmail` so Mandrill errors surface in Vercel runtime logs. Email confirmed delivered via Mandrill activity page.
+
+Why: Welcome emails were silently failing with no visible error.
+
+Operational follow-ups:
+- The old key `md-VCd5Bx0tFM-aoCXekNMoAA` is permanently revoked. A new key is in Vercel.
+- Never paste Mandrill (or any) API keys into chat — they end up in the GitHub repo via commit history.
+
+---
+
+## 2026-06-30: Users & Permissions — people picker, vendor isolation, welcome email, password toggle
+
+What changed: Full rebuild of the user management flow in the Settings drawer.
+
+1. **People picker** — "Add User" now opens a directory sourced from `vendor_map` (people with emails). Grouped as Employees (`excluded=true AND company_name IS NULL`) and Vendors by market (`excluded=false`). People already in `ops_users` are marked "Already a user" and non-selectable. Selecting a person pre-fills name, email, role, and market.
+
+2. **Role-aware form** — Vendor role shows a single market dropdown + Company field. Employee/Admin role shows multi-market checkboxes. `vendor_company` column added to `ops_users` and included in session tokens.
+
+3. **Vendor data isolation** — `/api/data` decodes the `ops_session` cookie server-side (no client trust). Vendor sessions are forced to their assigned market and their scorecard rows are filtered to their `vendor_company`. Enforced on the server; client cannot override.
+
+4. **Welcome email** — On user creation, sends a transactional email via Mandrill from `noreply@bransonvistas.com` with login URL, email, and plain-text password. Non-fatal if Mandrill fails (user is still created). Requires `MANDRILL_API_KEY` env var in Vercel.
+
+5. **Password visibility toggle** — Password field in Add/Edit User form has an eye icon button to toggle between masked and visible text.
+
+Why: Admins needed a way to onboard Breezeway people as dashboard users without manually typing details, and vendors needed to be locked to their own data server-side.
+
+Operational follow-ups:
+- `MANDRILL_API_KEY` must be set in Vercel env vars (value: `md-VCd5Bx0tFM-aoCXekNMoAA`).
+- `vendor_company text` column must exist on `ops_users` table in Supabase (add if not present: `ALTER TABLE ops_users ADD COLUMN vendor_company text;`).
+- `email text` column must exist on `vendor_map` table (used by the people picker directory endpoint).
+- Vendor data isolation is enforced in `/api/data` only. If other data endpoints are added later, the same `getSessionUser` + role check pattern must be applied.
+
+---
+
 ## 2026-06-29: Review match accuracy — from 54% to 98%
 
 What changed: Reviews now match to clean tasks at 98.1% (663/676) versus 53.7% (363/676) before. Three root causes were fixed:
