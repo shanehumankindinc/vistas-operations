@@ -718,7 +718,9 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 12 }}>{t.task_title || "Clean"}</td>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", fontSize: 12, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span title={t.task_title || undefined}>{t.task_title || "Clean"}</span>
+                        </td>
                         <td style={{ padding: "9px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                           {(t.linked_issues || []).length > 0
                             ? <button
