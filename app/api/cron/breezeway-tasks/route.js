@@ -170,6 +170,7 @@ export async function GET(req) {
       const bzToken = await getBzToken(market);
       const bzHeaders = { Authorization: `JWT ${bzToken}`, Accept: "application/json" };
       const internalPeople = new Set();
+      const peopleEmailMap = {}; // fullName (lowercase) -> email
       try {
         let peoplePage = 1;
         while (true) {
@@ -182,9 +183,11 @@ export async function GET(req) {
           const people = Array.isArray(body) ? body : (body?.results || body?.data || []);
           for (const p of people) {
             const role = (p.type_role || "").toLowerCase();
-            if (!INTERNAL_ROLES.has(role)) continue;
-            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim().toLowerCase();
-            if (fullName) internalPeople.add(fullName);
+            const fullName = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+            if (!fullName) continue;
+            if (INTERNAL_ROLES.has(role)) internalPeople.add(fullName.toLowerCase());
+            const email = Array.isArray(p.emails) ? p.emails[0] : null;
+            if (email) peopleEmailMap[fullName.toLowerCase()] = email;
           }
           if (people.length < 100) break;
           peoplePage++;
@@ -212,6 +215,17 @@ export async function GET(req) {
             .eq("individual_name", name)
             .is("company_name", null);
         }
+      }
+
+      // Write emails onto vendor_map rows where email is currently null.
+      // Only update — never overwrite a manually-set email.
+      for (const [nameLower, email] of Object.entries(peopleEmailMap)) {
+        await supabase
+          .from("vendor_map")
+          .update({ email })
+          .eq("market", market)
+          .ilike("individual_name", nameLower)
+          .is("email", null);
       }
 
       // Retroactively exclude any existing vendor_map entries whose name now appears
