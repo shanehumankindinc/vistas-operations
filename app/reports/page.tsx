@@ -195,7 +195,7 @@ export default function ReportsPage() {
           <div style={{ padding: 48, textAlign: "center", color: "#9ca3af", fontSize: 14 }}>Loading…</div>
         ) : grouped.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center", color: "#9ca3af", fontSize: 14, background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb" }}>
-            No reports yet.{userRole === "admin" ? " Click "Generate Report" to create your first one." : " Check back after reports are published."}
+            No reports yet.{userRole === "admin" ? ` Click "Generate Report" to create your first one.` : " Check back after reports are published."}
           </div>
         ) : (
           grouped.map(([periodStart, periodRows]) => (
