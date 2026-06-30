@@ -22,6 +22,19 @@ const RANGES = [
 
 type LinkedIssue = { task_id: string; title: string | null; created_by: string | null };
 
+type MaintenanceIssue = {
+  task_id: string;
+  created_at: string | null;
+  property_name: string | null;
+  task_title: string | null;
+  description: string | null;
+  clean_status: string | null;
+  priority: string | null;
+  created_by: string | null;
+};
+
+type PanelIssue = MaintenanceIssue & { vendor_name: string };
+
 type EnrichedTask = {
   task_id: string;
   scheduled_date: string;
@@ -60,7 +73,9 @@ type Row = {
   property_count: number;
   median_time: number | null;
   feedback_count: number;
+  market?: string | null;
   enriched_tasks?: EnrichedTask[];
+  issues?: MaintenanceIssue[];
 };
 
 type Meta = {
@@ -217,7 +232,7 @@ export default function Dashboard() {
 
   const [market, setMarket] = useState("all");
   const [filterCleaner, setFilterCleaner] = useState("all");
-  const [rangeDays, setRangeDays] = useState(90);
+  const [rangeDays, setRangeDays] = useState(30);
   const [rows, setRows] = useState<Row[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -227,6 +242,11 @@ export default function Dashboard() {
   // Drill-down: null = summary view, Row = detail view for that cleaner
   const [drillCleaner, setDrillCleaner] = useState<Row | null>(null);
   const [filterCrew, setFilterCrew] = useState("all");
+
+  // Issues panel
+  const [showIssuesPanel, setShowIssuesPanel] = useState(false);
+  const [issuesPanelVendor, setIssuesPanelVendor] = useState<string | null>(null);
+  const [issuesPanelLinkedIds, setIssuesPanelLinkedIds] = useState<Set<string> | null>(null);
 
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
@@ -325,6 +345,23 @@ export default function Dashboard() {
     ...rows.map(r => ({ key: r.vendor_name, label: r.vendor_name })).sort((a, b) => a.label.localeCompare(b.label)),
   ], [rows]);
 
+  const panelIssues = useMemo((): PanelIssue[] => {
+    if (!showIssuesPanel) return [];
+    // When opened from a task-row click (issuesPanelLinkedIds set), search ALL vendors
+    // because the linked maintenance task may have been created by a different vendor's crew.
+    const sourceRows = issuesPanelLinkedIds ? rows : (issuesPanelVendor ? rows.filter(r => r.vendor_name === issuesPanelVendor) : rows);
+    const all: PanelIssue[] = sourceRows.flatMap(r =>
+      (r.issues || []).map(t => ({ ...t, vendor_name: r.vendor_name }))
+    );
+    const byLinked = issuesPanelLinkedIds
+      ? all.filter(t => issuesPanelLinkedIds.has(t.task_id))
+      : all;
+    const filtered = filterCrew !== "all"
+      ? byLinked.filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase())
+      : byLinked;
+    return filtered.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  }, [showIssuesPanel, issuesPanelVendor, issuesPanelLinkedIds, rows, filterCrew]);
+
   const crewOptions = useMemo(() => {
     const names = [
       ...new Set(
@@ -387,9 +424,17 @@ export default function Dashboard() {
             <span style={{ color: "#ffffff" }}>Vistas</span> Ops
           </span>
           <span style={{ width: 1, height: 20, background: "#1e293b", marginRight: 20, flexShrink: 0 }} />
-          <NavSelect value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
-          <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
-          <NavSelect value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
+          {currentUser?.role === "vendor" ? (
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>
+              {MARKET_LABELS[(currentUser.markets || [])[0]] || ""}
+            </span>
+          ) : (
+            <>
+              <NavSelect value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
+              <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
+              <NavSelect value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
+            </>
+          )}
         </>
       )}
       {drillCleaner && (
@@ -475,6 +520,97 @@ export default function Dashboard() {
     </nav>
   );
 
+  // ─── Issues Panel ─────────────────────────────────────────────────────────────
+
+  const panelTitle = issuesPanelVendor
+    ? `${issuesPanelVendor} — Maintenance Issues`
+    : "All Vendors — Maintenance Issues";
+
+  const issuesPanelEl = showIssuesPanel && (
+    <>
+      <div onClick={() => { setShowIssuesPanel(false); setIssuesPanelLinkedIds(null); }}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100 }} />
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: "min(960px, 92vw)",
+        background: "#ffffff", zIndex: 101, display: "flex", flexDirection: "column",
+        boxShadow: "-8px 0 32px rgba(0,0,0,0.18)",
+      }}>
+        <div style={{ padding: "20px 28px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{panelTitle}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+              {meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : ""}
+              &nbsp;·&nbsp; {panelIssues.length} issue{panelIssues.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <button onClick={() => { setShowIssuesPanel(false); setIssuesPanelLinkedIds(null); }}
+            style={{ border: "none", background: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {panelIssues.length === 0 ? (
+            <div style={{ padding: "48px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No maintenance issues found for this period.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#1e2a3a" }}>
+                    {(!issuesPanelVendor
+                      ? ["Company", "Reported By", "Created", "Property", "Task Name", "Description", "Status", "Priority", "Link"]
+                      : ["Created", "Property", "Task Name", "Description", "Status", "Priority", "Link"]
+                    ).map(h => (
+                      <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {panelIssues.map((t, i) => (
+                    <tr key={t.task_id || i}
+                      style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafbfc" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#eef2ff")}
+                      onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
+                      {!issuesPanelVendor && (
+                        <>
+                          <td style={{ padding: "9px 14px", color: "#374151", fontWeight: 600, whiteSpace: "nowrap" }}>{t.vendor_name || "—"}</td>
+                          <td style={{ padding: "9px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.created_by || "—"}</td>
+                        </>
+                      )}
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>
+                        {t.created_at ? fmtDate(t.created_at.slice(0, 10)) : "—"}
+                      </td>
+                      <td style={{ padding: "9px 14px", color: "#1e2a3a", fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
+                      </td>
+                      <td style={{ padding: "9px 14px", color: "#374151", whiteSpace: "nowrap" }}>{t.task_title || "—"}</td>
+                      <td style={{ padding: "9px 14px", color: "#6b7280", maxWidth: 240, fontSize: 12, wordBreak: "break-word", whiteSpace: "normal" }}>
+                        {t.description || <span style={{ color: "#d1d5db" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>{t.clean_status || "—"}</td>
+                      <td style={{ padding: "9px 14px", whiteSpace: "nowrap", color: "#6b7280" }}>
+                        {t.priority || <span style={{ color: "#d1d5db" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "9px 14px" }}>
+                        <a href={`https://app.breezeway.io/task/${t.task_id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ color: "#3b82f6", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
+                          title="Open in Breezeway">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                          <span style={{ fontSize: 12 }}>Open</span>
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
   // ─── Drill-down view ──────────────────────────────────────────────────────────
 
   if (drillCleaner) {
@@ -483,9 +619,9 @@ export default function Dashboard() {
     const tasks = filterCrew === "all" ? allTasks : allTasks.filter(t => t.individual_name === filterCrew);
     const dateLabel = meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : "";
 
-    function Chip({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
+    function Chip({ label, value, color, onClick }: { label: string; value: React.ReactNode; color?: string; onClick?: () => void }) {
       return (
-        <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div onClick={onClick} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, cursor: onClick ? "pointer" : "default" }}>
           <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: color || "#1a202c" }}>{value}</span>
         </div>
@@ -520,10 +656,16 @@ export default function Dashboard() {
           <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#9ca3af" }}>Individual clean history with on-time performance, cleanliness ratings, and refund exposure.</p>
 
           {/* KPI chips */}
+          {(() => {
+            const crewIssues = filterCrew === "all"
+              ? (c.issues || [])
+              : (c.issues || []).filter(t => (t.created_by || "").toLowerCase() === filterCrew.toLowerCase());
+            const kpiIssuesCreated = crewIssues.length;
+            return (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
             <Chip label="Cleans" value={kpiCleans} />
-            <Chip label="Tasks" value={c.total_tasks || kpiCleans} />
-            <Chip label="Issues Created" value={c.issues_created || 0} color={(c.issues_created || 0) > 0 ? "#16a34a" : undefined} />
+            <Chip label="Issues Created" value={kpiIssuesCreated} color={kpiIssuesCreated > 0 ? "#16a34a" : undefined}
+              onClick={kpiIssuesCreated > 0 ? () => { setIssuesPanelVendor(c.vendor_name); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); } : undefined} />
             <Chip label="On-time Rate" value={pct(kpiOnTimeRate)} color={rateColor(kpiOnTimeRate)} />
             <Chip label="On-time / Cleans" value={`${kpiOnTime} / ${kpiDecided}`} />
             <Chip label="Tasks Overdue" value={kpiOverdue > 0 ? kpiOverdue : "None"} color={kpiOverdue > 0 ? "#dc2626" : "#16a34a"} />
@@ -533,6 +675,8 @@ export default function Dashboard() {
             <Chip label="GS Feedback" value={tasks.filter(t => t.cleaner_feedback).length || "None"} color={tasks.filter(t => t.cleaner_feedback).length > 0 ? "#7c3aed" : undefined} />
             <Chip label="Refund Exposure" value={fmtMoney(totalRefundAmt)} color={totalRefundAmt > 0 ? "#dc2626" : "#16a34a"} />
           </div>
+            );
+          })()}
 
           {/* Task table */}
           <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
@@ -572,10 +716,21 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 12 }}>{t.task_title || "Clean"}</td>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", fontSize: 12 }}>
+                          <div title={t.task_title || undefined} style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.task_title || "Clean"}</div>
+                        </td>
                         <td style={{ padding: "9px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                           {(t.linked_issues || []).length > 0
-                            ? <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 13 }}>{(t.linked_issues || []).length}</span>
+                            ? <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setIssuesPanelVendor(c.vendor_name);
+                                  setIssuesPanelLinkedIds(new Set(t.linked_issues.map(li => li.task_id)));
+                                  setShowIssuesPanel(true);
+                                }}
+                                style={{ color: "#16a34a", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline dotted" }}>
+                                {(t.linked_issues || []).length}
+                              </button>
                             : <span style={{ color: "#d1d5db" }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 12px", color: "#6b7280", whiteSpace: "nowrap" }}>{t.individual_name || "—"}</td>
@@ -615,6 +770,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      {issuesPanelEl}
       </div>
     );
   }
@@ -655,18 +811,23 @@ export default function Dashboard() {
             {[
               { label: "Cleaners", value: kpiRows.length, render: (v: number) => String(v) },
               { label: "Total Cleans", value: kpiRows.reduce((s, r) => s + r.total_cleans, 0), render: (v: number) => v.toLocaleString() },
-              { label: "Issues Created", value: kpiRows.reduce((s, r) => s + (r.issues_created || 0), 0), render: (v: number) => v.toLocaleString() },
+              { label: "Issues Created", value: kpiRows.reduce((s, r) => s + (r.issues_created || 0), 0), render: (v: number) => v.toLocaleString(), clickable: true },
               { label: "Avg On-time", value: kpiOnTime, render: (v: number | null) => pct(v), color: rateColor(kpiOnTime) },
               { label: "Avg Cleanliness", value: kpiCleanliness, render: (v: number | null) => v == null ? "—" : v.toFixed(2), color: scoreColor(kpiCleanliness) },
               { label: "Reviews", value: kpiRows.reduce((s, r) => s + r.review_count, 0), render: (v: number) => v.toLocaleString() },
               { label: "Properties", value: kpiRows.reduce((s, r) => s + r.property_count, 0), render: (v: number) => v.toLocaleString() },
-            ].map(({ label, value, render, color }) => (
-              <div key={label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{(render as (v: any) => string)(value)}</span>
-              </div>
-            ))}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ].map(({ label, value, render, color, clickable }: any) => {
+              const isClickable = clickable && (value as number) > 0;
+              return (
+                <div key={label}
+                  onClick={isClickable ? () => { setIssuesPanelVendor(filterCleaner !== "all" ? filterCleaner : null); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); } : undefined}
+                  style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 14px", display: "flex", alignItems: "center", gap: 8, cursor: isClickable ? "pointer" : "default" }}>
+                  <span style={{ fontSize: 11, color: "#9ca3af", fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: color || "#1a202c" }}>{render(value)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -711,10 +872,21 @@ export default function Dashboard() {
                       onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}>
                       <td style={{ padding: "11px 14px" }}>
                         <div style={{ fontWeight: 600, color: "#1e2a3a" }}>{row.vendor_name}</div>
-                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
+                        {row.market === "branson" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#dbeafe", color: "#1d4ed8" }}>Branson</span>}
+                        {row.market === "deep_creek" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#dcfce7", color: "#15803d" }}>Deep Creek</span>}
+                        {row.market === "poconos" && <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const, padding: "1px 6px", borderRadius: 4, background: "#fef3c7", color: "#b45309" }}>Poconos</span>}
+                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{row.property_count} {row.property_count === 1 ? "property" : "properties"}</div>
                       </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.total_cleans}</td>
-                      <td style={{ padding: "11px 14px", textAlign: "right", color: (row.issues_created || 0) > 0 ? "#16a34a" : "#9ca3af", fontWeight: (row.issues_created || 0) > 0 ? 700 : 400 }}>{row.issues_created || "—"}</td>
+                      <td style={{ padding: "11px 14px", textAlign: "right" }}>
+                        {(row.issues_created || 0) > 0 ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); setIssuesPanelVendor(row.vendor_name); setIssuesPanelLinkedIds(null); setShowIssuesPanel(true); }}
+                            style={{ color: "#16a34a", fontWeight: 700, background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0, textDecoration: "underline dotted" }}>
+                            {row.issues_created}
+                          </button>
+                        ) : <span style={{ color: "#9ca3af" }}>—</span>}
+                      </td>
                       <td style={{ padding: "11px 14px", textAlign: "right", color: (row.feedback_count || 0) > 0 ? "#7c3aed" : "#9ca3af", fontWeight: (row.feedback_count || 0) > 0 ? 700 : 400 }}>{row.feedback_count || "—"}</td>
                       <td style={{ padding: "11px 14px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: rateColor(row.on_time_rate), fontWeight: 700 }}>
                         {pct(row.on_time_rate)}
@@ -1016,6 +1188,7 @@ export default function Dashboard() {
           </div>
         </>
       )}
+      {issuesPanelEl}
     </div>
   );
 }

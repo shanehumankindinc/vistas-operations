@@ -146,6 +146,7 @@ export async function GET(req) {
             description: t.description || null,
             summary:     t.summary?.note || null,
             comments:    t.comments?.length ? t.comments : null,
+            priority:    t.priority || t.priority_level || null,
           }),
         });
       }
