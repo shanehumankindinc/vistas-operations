@@ -351,8 +351,10 @@ export default function Dashboard() {
 
   const panelIssues = useMemo((): PanelIssue[] => {
     if (!showIssuesPanel) return [];
-    const baseRows = issuesPanelVendor ? rows.filter(r => r.vendor_name === issuesPanelVendor) : rows;
-    const all: PanelIssue[] = baseRows.flatMap(r =>
+    // When opened from a task-row click (issuesPanelLinkedIds set), search ALL vendors
+    // because the linked maintenance task may have been created by a different vendor's crew.
+    const sourceRows = issuesPanelLinkedIds ? rows : (issuesPanelVendor ? rows.filter(r => r.vendor_name === issuesPanelVendor) : rows);
+    const all: PanelIssue[] = sourceRows.flatMap(r =>
       (r.issues || []).map(t => ({ ...t, vendor_name: r.vendor_name }))
     );
     const byLinked = issuesPanelLinkedIds
@@ -718,8 +720,8 @@ export default function Dashboard() {
                         <td style={{ padding: "9px 12px", color: "#1e2a3a", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           <span title={t.property_name || undefined}>{t.property_name || "—"}</span>
                         </td>
-                        <td style={{ padding: "9px 12px", color: "#6b7280", fontSize: 12, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          <span title={t.task_title || undefined}>{t.task_title || "Clean"}</span>
+                        <td style={{ padding: "9px 12px", color: "#6b7280", fontSize: 12 }}>
+                          <div title={t.task_title || undefined} style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.task_title || "Clean"}</div>
                         </td>
                         <td style={{ padding: "9px 12px", textAlign: "center", whiteSpace: "nowrap" }}>
                           {(t.linked_issues || []).length > 0
