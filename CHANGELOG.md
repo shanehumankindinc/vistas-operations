@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-06-30: Admin-only enforcement for Users & Permissions
+
+What changed: The gear icon (Settings) is now hidden entirely for non-admin users. The `/api/users` endpoints (GET, POST, PATCH, DELETE) enforce an admin check server-side — non-admins receive a 403. Previously the API had no role check and any logged-in user could read the full user list or modify accounts.
+
+Why: Employees and vendors have no reason to see or manage other users.
+
+---
+
+## 2026-06-30: Welcome email — Mandrill integration debugged and live
+
+What changed: Fixed two bugs that prevented welcome emails from sending: (1) `sendWelcomeEmail` was called without `await`, so Vercel terminated the serverless function before the Mandrill fetch completed; (2) the initial `MANDRILL_API_KEY` in Vercel was invalid (the key had been revoked after being exposed in a public GitHub commit). Added response logging to `sendWelcomeEmail` so Mandrill errors surface in Vercel runtime logs. Email confirmed delivered via Mandrill activity page.
+
+Why: Welcome emails were silently failing with no visible error.
+
+Operational follow-ups:
+- The old key `md-VCd5Bx0tFM-aoCXekNMoAA` is permanently revoked. A new key is in Vercel.
+- Never paste Mandrill (or any) API keys into chat — they end up in the GitHub repo via commit history.
+
+---
+
 ## 2026-06-30: Users & Permissions — people picker, vendor isolation, welcome email, password toggle
 
 What changed: Full rebuild of the user management flow in the Settings drawer.
