@@ -96,7 +96,7 @@ export async function POST(req) {
     .select(SAFE_COLS)
     .single();
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  sendWelcomeEmail({ name, email: insert.email, password });
+  await sendWelcomeEmail({ name, email: insert.email, password });
   return Response.json({ user: data });
 }
 
