@@ -197,16 +197,13 @@ function exportCSV(cleaner: Row, meta: Meta | null) {
 export default function Dashboard() {
   const router = useRouter();
 
-  // Parse logged-in user from session cookie (base64url.sig format set by login API)
+  // Read role/name from ops_ui cookie (NOT HttpOnly — set alongside the HttpOnly session token)
   const currentUser = useMemo(() => {
     if (typeof document === "undefined") return null;
-    const match = document.cookie.match(/(?:^|;\s*)ops_session=([^;]+)/);
+    const match = document.cookie.match(/(?:^|;\s*)ops_ui=([^;]+)/);
     if (!match) return null;
     try {
-      const [data] = match[1].split(".");
-      // Token is base64url-encoded; convert to standard base64 for native atob()
-      const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
-      return JSON.parse(atob(b64));
+      return JSON.parse(decodeURIComponent(match[1]));
     } catch { return null; }
   }, []);
 

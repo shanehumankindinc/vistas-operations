@@ -35,11 +35,18 @@ export async function POST(req) {
   const { password_hash: _, ...safeUser } = user;
   const token = signToken(safeUser);
 
+  const maxAge = 60 * 60 * 24 * 30;
+  // ops_session: HttpOnly so JS cannot read the signed token
+  // ops_ui: NOT HttpOnly so the client can read role/name for UI-only decisions (gear icon, etc.)
+  const uiPayload = encodeURIComponent(JSON.stringify({ role: safeUser.role, name: safeUser.name }));
   return new Response(JSON.stringify({ ok: true, user: safeUser }), {
     status: 200,
     headers: {
       "Content-Type": "application/json",
-      "Set-Cookie": `ops_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`,
+      "Set-Cookie": [
+        `ops_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+        `ops_ui=${uiPayload}; Path=/; SameSite=Lax; Max-Age=${maxAge}`,
+      ].join(", "),
     },
   });
 }
