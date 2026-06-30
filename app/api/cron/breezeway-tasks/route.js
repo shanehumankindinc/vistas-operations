@@ -188,7 +188,7 @@ export async function GET(req) {
             if (!fullName) continue;
             if (INTERNAL_ROLES.has(role)) internalPeople.add(fullName.toLowerCase());
             const email = Array.isArray(p.emails) ? p.emails[0] : null;
-            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim() };
+            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim(), name: fullName };
           }
           if (people.length < 100) break;
           peoplePage++;
@@ -230,20 +230,21 @@ export async function GET(req) {
         .not("company_name", "is", null);
       const knownCompanyNames = new Set((existingCompanies || []).map(r => r.company_name.toLowerCase()));
 
-      for (const [nameLower, { email, lastName }] of Object.entries(bzPeople)) {
+      for (const [nameLower, { email, lastName, name }] of Object.entries(bzPeople)) {
         const isInternal = internalPeople.has(nameLower);
         const companyFromLastName = knownCompanyNames.has(lastName.toLowerCase()) ? lastName : null;
-        // Upsert: inserts if not present, ignores if already exists (preserves manual overrides)
+        // Upsert: inserts if not present, ignores if already exists (preserves manual overrides).
+        // Use original casing for individual_name to avoid duplicate rows alongside task-derived entries.
         await supabase.from("vendor_map").upsert(
-          { market, individual_name: nameLower, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
+          { market, individual_name: name, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
           { onConflict: "market,individual_name", ignoreDuplicates: true }
         );
-        // For existing rows: write email if null, company_name if null
+        // For existing rows that match case-insensitively: write email if null
         await supabase
           .from("vendor_map")
           .update({ email, ...(companyFromLastName && { company_name: companyFromLastName }) })
           .eq("market", market)
-          .ilike("individual_name", nameLower)
+          .ilike("individual_name", name)
           .is("email", null);
       }
 

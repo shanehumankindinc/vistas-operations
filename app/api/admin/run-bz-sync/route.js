@@ -199,7 +199,7 @@ export async function GET(req) {
             if (!fullName) continue;
             if (INTERNAL_ROLES.has((p.type_role || "").toLowerCase())) internalPeople.add(fullName.toLowerCase());
             const email = Array.isArray(p.emails) ? p.emails[0] : null;
-            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim() };
+            if (email) bzPeople[fullName.toLowerCase()] = { email, lastName: (p.last_name || "").trim(), name: fullName };
           }
           if (people.length < 100) break;
           peoplePage++;
@@ -211,18 +211,18 @@ export async function GET(req) {
           .not("company_name", "is", null);
         const knownCompanyNames = new Set((existingCompanies || []).map(r => r.company_name.toLowerCase()));
         const todayStr = new Date().toISOString().slice(0, 10);
-        for (const [nameLower, { email, lastName }] of Object.entries(bzPeople)) {
+        for (const [nameLower, { email, lastName, name }] of Object.entries(bzPeople)) {
           const isInternal = internalPeople.has(nameLower);
           const companyFromLastName = knownCompanyNames.has(lastName.toLowerCase()) ? lastName : null;
           await supabase.from("vendor_map").upsert(
-            { market, individual_name: nameLower, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
+            { market, individual_name: name, email, company_name: companyFromLastName, excluded: isInternal, first_seen: todayStr },
             { onConflict: "market,individual_name", ignoreDuplicates: true }
           );
           await supabase
             .from("vendor_map")
             .update({ email, ...(companyFromLastName && { company_name: companyFromLastName }) })
             .eq("market", market)
-            .ilike("individual_name", nameLower)
+            .ilike("individual_name", name)
             .is("email", null);
         }
       } catch { /* non-fatal */ }
