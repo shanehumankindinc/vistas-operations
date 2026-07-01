@@ -128,16 +128,16 @@ Populated by `cron/property-calendar` (8am UTC). One row per listing per day for
 | `listing_id` | Guesty listing ID |
 | `market` | `branson` / `deep_creek` / `poconos` |
 | `date` | Calendar date (PK with listing_id + market) |
-| `day_type` | `vacant`, `checkin`, `checkout`, `turn`, `stayover`, or `owner_block` |
-| `reservation_id` | Guesty reservation ID (null for vacant/owner_block) |
-| `confirmation_code` | Guesty confirmation code (null for vacant/owner_block) |
+| `day_type` | `vacant`, `checkin`, `checkout`, `turn`, `guest_occupied`, or `owner_occupied` |
+| `reservation_id` | Guesty reservation ID (null for vacant/owner_occupied) |
+| `confirmation_code` | Guesty confirmation code (null for vacant/owner_occupied) |
 | `check_in_date` | Check-in date of the overlapping reservation or owner block |
 | `check_out_date` | Check-out date of the overlapping reservation or owner block |
-| `owner_id` | Guesty owner ID (owner_block rows only) |
-| `owner_name` | Owner full name (owner_block rows only) |
+| `owner_id` | Guesty owner ID (owner_occupied rows only) |
+| `owner_name` | Owner full name (owner_occupied rows only) |
 | `pulled_at` | When the cron computed this row |
 
-Day type priority: `turn > checkin > checkout > stayover > owner_block > vacant`. A `turn` is when a checkout and checkin occur on the same day (cleaner between guests).
+Day type priority: `turn > checkin > checkout > guest_occupied > owner_occupied > vacant`. A `turn` is when a checkout and checkin occur on the same day (cleaner between guests).
 
 ### `guesty_refunds`
 Populated by `cron/guesty-sync`. One row per reservation with a refund reason custom field value. Read-only from data serving paths.
