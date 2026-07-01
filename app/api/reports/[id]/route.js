@@ -18,11 +18,12 @@ export async function GET(req, { params }) {
   const user = getSessionUser(req);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+  const { id } = await params;
   const supabase = getSupabase();
   const { data: row, error } = await supabase
     .from("report_archive")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (error || !row) return Response.json({ error: "Not found" }, { status: 404 });
