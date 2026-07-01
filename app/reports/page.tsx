@@ -186,21 +186,28 @@ export default function ReportsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     setGenResult(null);
+    const markets = genMarket === "all"
+      ? ["branson", "deep_creek", "poconos"]
+      : [genMarket];
     try {
-      const res = await fetch("/api/reports/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ market: genMarket, period_start: genStart, period_end: genEnd }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setGenResult("Error: " + (json.error || "Unknown error"));
-      } else if (json.generated === 0 && json.errors?.length > 0) {
-        setGenResult("Error: " + json.errors[0].error);
-      } else if (json.generated === 0 && json.message) {
-        setGenResult("Error: " + json.message);
+      const results = await Promise.all(
+        markets.map((m) =>
+          fetch("/api/reports/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ market: m, period_start: genStart, period_end: genEnd }),
+          }).then((r) => r.json().then((j) => ({ market: m, ok: r.ok, ...j })))
+        )
+      );
+      const totalGenerated = results.reduce((sum, r) => sum + (r.generated ?? 0), 0);
+      const errors = results.flatMap((r) => r.errors ?? []);
+      if (totalGenerated === 0 && errors.length > 0) {
+        setGenResult("Error: " + errors[0].error);
+      } else if (totalGenerated === 0) {
+        setGenResult("No reports generated. Check that data exists for this period.");
       } else {
-        setGenResult(`Generated ${json.generated} report${json.generated !== 1 ? "s" : ""} for ${genMarket}.`);
+        const label = markets.length > 1 ? "all markets" : genMarket;
+        setGenResult(`Generated ${totalGenerated} report${totalGenerated !== 1 ? "s" : ""} for ${label}.${errors.length > 0 ? ` (${errors.length} error${errors.length !== 1 ? "s" : ""})` : ""}`);
         load();
       }
     } catch (e: any) {
@@ -291,7 +298,7 @@ export default function ReportsPage() {
               <h2 style={{ margin: "0 0 20px", fontSize: 17, fontWeight: 700, color: "#111827" }}>Generate Reports</h2>
               <label style={labelStyle}>Market</label>
               <select value={genMarket} onChange={(e) => setGenMarket(e.target.value)} style={inputStyle}>
-                {MARKET_OPTIONS.filter((o) => o.key !== "all").map((o) => (
+                {MARKET_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
               </select>
