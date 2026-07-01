@@ -120,8 +120,28 @@ Populated by `cron/checkins`. Contains upcoming reservations (check-in from toda
 
 **Important:** `guesty_checkins` only holds FUTURE reservations. The Guesty `/v1/reservations` endpoint with date filters returns only upcoming check-ins regardless of statuses requested. Historical checkout dates are not available via this table.
 
-### `guesty_refunds`, `guesty_properties`
-Populated by `cron/guesty-sync`. Read-only from data serving paths.
+### `guesty_refunds`
+Populated by `cron/guesty-sync`. One row per reservation with a refund reason custom field value. Read-only from data serving paths.
+
+### `guesty_properties`
+Populated by `cron/guesty-sync`. One row per Guesty listing per market. Key columns:
+
+| Column | Notes |
+|--------|-------|
+| `id` | Guesty listing MongoDB ObjectID |
+| `market` | `branson` / `deep_creek` / `poconos` |
+| `nickname` | Short property name |
+| `title` | Full listing title |
+| `address` | JSONB address object |
+| `accommodates` | Guest capacity |
+| `bedrooms` / `bathrooms` | Room counts |
+| `property_type` | Guesty property type string |
+| `tags` | JSONB array of tags |
+| `description` | Listing description text (`l.description` or `l.publicDescription`) |
+| `amenities` | JSONB array of amenity strings/objects |
+| `custom_fields` | JSONB array of `{ fieldId, value }` — includes gate codes, guest access, alarm codes, etc. |
+| `money` | JSONB — full money/fees/pricing object from Guesty |
+| `pulled_at` | Last sync timestamp |
 
 ---
 

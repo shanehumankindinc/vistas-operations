@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-07-01: Expand guesty_properties sync to capture all listing data
+
+What changed: `guesty_properties` now stores four additional fields from the Guesty listing object: `description` (text), `amenities` (jsonb array), `custom_fields` (jsonb array of `{ fieldId, value }` — includes gate codes, guest access, alarm codes, etc.), and `money` (jsonb — contains fees, pricing, currency). Supabase migration adds the columns. The sync cron code change adds 4 lines. Zero new API calls — `fetchAllListings` already returned this data; we were discarding it. Added `admin/debug-guesty-listing` route to inspect raw listing object shape by market and optional listing ID.
+
+Why: Gate codes, guest access instructions, amenity lists, and fee structures were in Guesty but not in Supabase, making them unavailable for programmatic use.
+
+Operational follow-ups: The new columns will be null until the guesty-sync cron next runs (7am UTC). To populate immediately, trigger the cron manually via Vercel. Use `/api/admin/debug-guesty-listing?secret=CRON_SECRET&market=branson` to verify the raw field names Guesty returns if any column comes back null.
+
+---
+
 ## 2026-07-01: Report PDF download, score colors, tier action notes, crew quality flag
 
 What changed: Four improvements to the generated report HTML.
