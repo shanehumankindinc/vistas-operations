@@ -34,13 +34,28 @@ export async function GET(req, { params }) {
     }
   }
 
+  // Download the file from Storage and proxy it with correct Content-Type.
+  // A direct redirect to the signed URL causes browsers to display raw source
+  // because Supabase Storage doesn't serve text/html with the charset browsers need.
   const { data: signedData, error: signErr } = await supabase.storage
     .from("cleaner-reports")
-    .createSignedUrl(row.file_url, 3600);
+    .createSignedUrl(row.file_url, 60);
 
   if (signErr || !signedData?.signedUrl) {
     return Response.json({ error: "Could not generate download URL" }, { status: 500 });
   }
 
-  return Response.redirect(signedData.signedUrl, 302);
+  const upstream = await fetch(signedData.signedUrl);
+  if (!upstream.ok) {
+    return Response.json({ error: "Report file not found" }, { status: 404 });
+  }
+
+  const html = await upstream.text();
+  return new Response(html, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=300",
+    },
+  });
 }

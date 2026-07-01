@@ -46,15 +46,5 @@ export async function GET(req) {
   const { data, error } = await query;
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  // Generate a signed URL for each row (1-hour TTL)
-  const rows = await Promise.all(
-    (data || []).map(async (row) => {
-      const { data: signedData } = await supabase.storage
-        .from("cleaner-reports")
-        .createSignedUrl(row.file_url, 3600);
-      return { ...row, signed_url: signedData?.signedUrl || null };
-    })
-  );
-
-  return Response.json({ rows });
+  return Response.json({ rows: data || [] });
 }

@@ -19,7 +19,6 @@ type ReportRow = {
   report_type: string;
   cleaner_company: string | null;
   created_by: string | null;
-  signed_url: string | null;
 };
 
 function formatPeriod(start: string, end: string) {
@@ -220,9 +219,9 @@ export default function ReportsPage() {
                         {formatMarket(row.market)} · Generated {new Date(row.generated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </div>
                     </div>
-                    {row.signed_url ? (
+                    {row.id ? (
                       <a
-                        href={row.signed_url}
+                        href={`/api/reports/${row.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ padding: "6px 14px", background: "#f0fdf4", color: "#1a7a3c", border: "1px solid #bbf7d0", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}
