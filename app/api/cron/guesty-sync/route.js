@@ -103,6 +103,10 @@ export async function GET(req) {
         bathrooms:     l.bathrooms || null,
         property_type: l.propertyType || null,
         tags:          l.tags || [],
+        description:   l.description || l.publicDescription || null,
+        amenities:     l.amenities || [],
+        custom_fields: l.customFields || [],
+        money:         l.money || null,
         pulled_at:     new Date().toISOString(),
       }));
 
