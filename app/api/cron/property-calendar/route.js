@@ -12,12 +12,12 @@ export const dynamic = "force-dynamic";
 // Deletes rows with date < today to keep the table lean.
 //
 // day_type values (in priority order):
-//   turn        — checkout AND checkin for different reservations on same day
-//   checkin     — guests arriving today
-//   checkout    — guests departing today, no new arrival
-//   stayover    — mid-stay (check_in < today < check_out)
-//   owner_block — owner block overlaps this day
-//   vacant      — nothing scheduled
+//   turn           — checkout AND checkin for different reservations on same day
+//   checkin        — guests arriving today
+//   checkout       — guests departing today, no new arrival
+//   guest_occupied — mid-stay (check_in < today < check_out)
+//   owner_occupied — owner block overlaps this day
+//   vacant         — nothing scheduled
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -122,14 +122,14 @@ export async function GET(req) {
             checkInDate = r.check_in_date;
             checkOutDate = r.check_out_date;
           } else if (stayoversToday.length > 0) {
-            dayType = "stayover";
+            dayType = "guest_occupied";
             const r = stayoversToday[0];
             reservationId = r.reservation_id;
             confirmationCode = r.confirmation_code;
             checkInDate = r.check_in_date;
             checkOutDate = r.check_out_date;
           } else if (ownerBlockToday) {
-            dayType = "owner_block";
+            dayType = "owner_occupied";
             ownerId = ownerBlockToday.ownerId || null;
             ownerName = ownerBlockToday.owner ? ownerBlockToday.owner.fullName || null : null;
             checkInDate = ownerBlockToday.checkIn ? ownerBlockToday.checkIn.slice(0, 10) : null;
