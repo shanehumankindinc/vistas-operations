@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -245,6 +245,18 @@ export default function Dashboard() {
   const [issuesPanelVendor, setIssuesPanelVendor] = useState<string | null>(null);
   const [issuesPanelLinkedIds, setIssuesPanelLinkedIds] = useState<Set<string> | null>(null);
 
+  // Drill-down sort
+  const [drillSortKey, setDrillSortKey] = useState("scheduled_date");
+  const [drillSortAsc, setDrillSortAsc] = useState(false);
+
+  // Scroll-sync refs: top scrollbar ↔ table container
+  const summaryScrollRef = useRef<HTMLDivElement>(null);
+  const summaryTopRef    = useRef<HTMLDivElement>(null);
+  const drillScrollRef   = useRef<HTMLDivElement>(null);
+  const drillTopRef      = useRef<HTMLDivElement>(null);
+  const issueScrollRef   = useRef<HTMLDivElement>(null);
+  const issueTopRef      = useRef<HTMLDivElement>(null);
+
   // Settings drawer
   const [showSettings, setShowSettings] = useState(false);
   type OpsUser = { id: string; name: string; email: string; role: string; markets: string[]; vendor_company?: string | null };
@@ -336,6 +348,16 @@ export default function Dashboard() {
   }, [market, rangeDays]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Keep top ghost-div widths in sync with their table containers
+  function syncTopWidth(scrollEl: HTMLDivElement | null, topEl: HTMLDivElement | null) {
+    if (!scrollEl || !topEl) return;
+    const ghost = topEl.firstElementChild as HTMLElement | null;
+    if (ghost) ghost.style.width = scrollEl.scrollWidth + "px";
+  }
+  useLayoutEffect(() => { syncTopWidth(summaryScrollRef.current, summaryTopRef.current); }, [rows, loading]);
+  useLayoutEffect(() => { syncTopWidth(drillScrollRef.current, drillTopRef.current); }, [drillCleaner, filterCrew]);
+  useLayoutEffect(() => { syncTopWidth(issueScrollRef.current, issueTopRef.current); }, [showIssuesPanel, panelIssues]);
 
   const cleanerOptions = useMemo(() => [
     { key: "all", label: "All Cleaners" },
@@ -550,9 +572,17 @@ export default function Dashboard() {
           {panelIssues.length === 0 ? (
             <div style={{ padding: "48px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No maintenance issues found for this period.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <>
+              <div ref={issueTopRef}
+                onScroll={e => { if (issueScrollRef.current) issueScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+                style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9", flexShrink: 0 }}>
+                <div style={{ height: 1 }} />
+              </div>
+              <div ref={issueScrollRef}
+                onScroll={e => { if (issueTopRef.current) issueTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+                style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
+                <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
                     {(!issuesPanelVendor
                       ? ["Company", "Reported By", "Created", "Property", "Task Name", "Description", "Status", "Priority", "Link"]
@@ -604,7 +634,8 @@ export default function Dashboard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>{/* issueScrollRef */}
+            </>
           )}
         </div>
       </div>
@@ -615,8 +646,36 @@ export default function Dashboard() {
 
   if (drillCleaner) {
     const c = drillCleaner;
-    const allTasks = (c.enriched_tasks || []).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
+    const allTasks = (c.enriched_tasks || []).slice().sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date));
     const tasks = filterCrew === "all" ? allTasks : allTasks.filter(t => t.individual_name === filterCrew);
+
+    function handleDrillSort(key: string) {
+      if (drillSortKey === key) setDrillSortAsc(v => !v); else { setDrillSortKey(key); setDrillSortAsc(false); }
+    }
+    function DrillTh({ col, label, right = true }: { col: string; label: string; right?: boolean }) {
+      const active = drillSortKey === col;
+      return (
+        <th onClick={() => handleDrillSort(col)} style={{ padding: "10px 12px", textAlign: right ? "right" : "left", fontSize: 10, fontWeight: 600, color: active ? "#ffffff" : "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }}>
+          {label}{active ? (drillSortAsc ? " ↑" : " ↓") : ""}
+        </th>
+      );
+    }
+
+    const sortedTasks = [...tasks].sort((a, b) => {
+      let av: number | string, bv: number | string;
+      switch (drillSortKey) {
+        case "property_name": av = a.property_name || ""; bv = b.property_name || ""; break;
+        case "individual_name": av = a.individual_name || ""; bv = b.individual_name || ""; break;
+        case "clean_status": av = a.clean_status || ""; bv = b.clean_status || ""; break;
+        case "on_time": av = a.on_time ? 1 : 0; bv = b.on_time ? 1 : 0; break;
+        case "total_time": av = a.total_time || ""; bv = b.total_time || ""; break;
+        case "cleanliness": av = a.review?.cleanliness ?? -1; bv = b.review?.cleanliness ?? -1; break;
+        case "refund_amt": av = a.linked_refunds.reduce((s, r) => s + r.refund_amount, 0); bv = b.linked_refunds.reduce((s, r) => s + r.refund_amount, 0); break;
+        default: av = a.scheduled_date; bv = b.scheduled_date;
+      }
+      if (typeof av === "string") return drillSortAsc ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
+      return drillSortAsc ? av - (bv as number) : (bv as number) - av;
+    });
     const dateLabel = meta ? `${fmtDate(meta.fromDate)} → ${fmtDate(meta.toDate)}` : "";
 
     function Chip({ label, value, color, onClick }: { label: string; value: React.ReactNode; color?: string; onClick?: () => void }) {
@@ -679,21 +738,40 @@ export default function Dashboard() {
           })()}
 
           {/* Task table */}
-          <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
             <div style={{ padding: "10px 16px", borderBottom: "1px solid #f1f5f9", fontSize: 12, color: "#9ca3af" }}>
               {tasks.length} cleans &nbsp;·&nbsp; On-time rate applies to cleaning tasks only
             </div>
-            <div style={{ overflowX: "auto" }}>
+            {/* Top horizontal scrollbar */}
+            <div ref={drillTopRef}
+              onScroll={e => { if (drillScrollRef.current) drillScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+              style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9" }}>
+              <div style={{ height: 1 }} />
+            </div>
+            <div ref={drillScrollRef}
+              onScroll={e => { if (drillTopRef.current) drillTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+              style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
+                <thead style={{ position: "sticky", top: 52, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
-                    {["Sched Date", "Property", "Task", "Issues", "Crew", "Status", "Finished (Time)", "On Time?", "Check-In Deadline", "Time", "Cleanliness", "Review", "Feedback", "Refund?"].map(h => (
-                      <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
+                    <DrillTh col="scheduled_date" label="Sched Date" right={false} />
+                    <DrillTh col="property_name" label="Property" right={false} />
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Task</th>
+                    <th style={{ padding: "10px 12px", textAlign: "center", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Issues</th>
+                    <DrillTh col="individual_name" label="Crew" right={false} />
+                    <DrillTh col="clean_status" label="Status" right={false} />
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Finished (Time)</th>
+                    <DrillTh col="on_time" label="On Time?" />
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Check-In Deadline</th>
+                    <DrillTh col="total_time" label="Time" />
+                    <DrillTh col="cleanliness" label="Cleanliness" />
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Review</th>
+                    <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>Feedback</th>
+                    <DrillTh col="refund_amt" label="Refund?" />
                   </tr>
                 </thead>
                 <tbody>
-                  {tasks.map((t, i) => {
+                  {sortedTasks.map((t, i) => {
                     const finishedStr = t.finished_cst
                       ? `${fmtDateShort(t.finished_cst.dateStr)} ${t.finished_cst.hour}:${String(t.finished_cst.minute).padStart(2, "0")} ${t.tz_abbr || "CT"}`
                       : null;
@@ -762,12 +840,12 @@ export default function Dashboard() {
                       </tr>
                     );
                   })}
-                  {tasks.length === 0 && (
-                    <tr><td colSpan={13} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
+                  {sortedTasks.length === 0 && (
+                    <tr><td colSpan={14} style={{ padding: "32px", textAlign: "center", color: "#9ca3af" }}>No tasks in this range.</td></tr>
                   )}
                 </tbody>
               </table>
-            </div>
+            </div>{/* drillScrollRef */}
           </div>
         </div>
       {issuesPanelEl}
@@ -833,7 +911,7 @@ export default function Dashboard() {
 
         {error && <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, color: "#dc2626", fontSize: 13 }}>{error}</div>}
 
-        <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           {loading && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 0", color: "#9ca3af", fontSize: 14 }}>Loading…</div>}
 
           {!loading && rows.length === 0 && !error && (
@@ -844,9 +922,18 @@ export default function Dashboard() {
           )}
 
           {!loading && rows.length > 0 && (
-            <div style={{ overflowX: "auto" }}>
+            <>
+              {/* Top horizontal scrollbar */}
+              <div ref={summaryTopRef}
+                onScroll={e => { if (summaryScrollRef.current) summaryScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+                style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9", borderRadius: "8px 8px 0 0" }}>
+                <div style={{ height: 1 }} />
+              </div>
+              <div ref={summaryScrollRef}
+                onScroll={e => { if (summaryTopRef.current) summaryTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
+                style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
+                <thead style={{ position: "sticky", top: 52, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
@@ -906,7 +993,8 @@ export default function Dashboard() {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>{/* summaryScrollRef */}
+            </>
           )}
         </div>
 

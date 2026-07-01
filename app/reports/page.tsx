@@ -97,7 +97,7 @@ export default function ReportsPage() {
   // Generate modal
   const [showGenModal, setShowGenModal] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [genMarket, setGenMarket] = useState("branson");
+  const [genMarket, setGenMarket] = useState("all");
   const [genStart, setGenStart] = useState("");
   const [genEnd, setGenEnd] = useState("");
   const [genResult, setGenResult] = useState<string | null>(null);
