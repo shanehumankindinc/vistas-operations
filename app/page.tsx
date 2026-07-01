@@ -357,13 +357,6 @@ export default function Dashboard() {
   }
   useLayoutEffect(() => { syncTopWidth(summaryScrollRef.current, summaryTopRef.current); }, [rows, loading]);
   useLayoutEffect(() => { syncTopWidth(drillScrollRef.current, drillTopRef.current); }, [drillCleaner, filterCrew]);
-  useLayoutEffect(() => { syncTopWidth(issueScrollRef.current, issueTopRef.current); }, [showIssuesPanel, panelIssues]);
-
-  const cleanerOptions = useMemo(() => [
-    { key: "all", label: "All Cleaners" },
-    ...rows.map(r => ({ key: r.vendor_name, label: r.vendor_name })).sort((a, b) => a.label.localeCompare(b.label)),
-  ], [rows]);
-
   const panelIssues = useMemo((): PanelIssue[] => {
     if (!showIssuesPanel) return [];
     // When opened from a task-row click (issuesPanelLinkedIds set), search ALL vendors
@@ -380,6 +373,13 @@ export default function Dashboard() {
       : byLinked;
     return filtered.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
   }, [showIssuesPanel, issuesPanelVendor, issuesPanelLinkedIds, rows, filterCrew]);
+
+  useLayoutEffect(() => { syncTopWidth(issueScrollRef.current, issueTopRef.current); }, [showIssuesPanel, panelIssues]);
+
+  const cleanerOptions = useMemo(() => [
+    { key: "all", label: "All Cleaners" },
+    ...rows.map(r => ({ key: r.vendor_name, label: r.vendor_name })).sort((a, b) => a.label.localeCompare(b.label)),
+  ], [rows]);
 
   const crewOptions = useMemo(() => {
     const names = [
