@@ -13,6 +13,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/property-calendar",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/reports/generate?market=branson&auto=1",
       "schedule": "0 9 1 * *"
     },

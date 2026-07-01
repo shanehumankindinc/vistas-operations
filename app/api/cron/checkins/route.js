@@ -6,9 +6,9 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 // Runs at 7am UTC daily.
-// Fetches reservations with check-in dates from today-90 to today+2.
+// Fetches reservations with check-in dates from today-90 to today+16.
 // The 90-day lookback supports the scorecard's historical on-time calculations.
-// today+2 ensures pending cleans today and tomorrow have deadline context.
+// today+16 covers the property-calendar cron's 14-day forward window plus buffer.
 // Rows older than 95 days are deleted to keep the table lean.
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
@@ -21,7 +21,7 @@ export async function GET(req) {
   const fromDate = new Date(today);
   fromDate.setDate(today.getDate() - 90);
   const toDate = new Date(today);
-  toDate.setDate(today.getDate() + 2);
+  toDate.setDate(today.getDate() + 16);
   const fromStr = fromDate.toISOString().slice(0, 10);
   const toStr = toDate.toISOString().slice(0, 10);
 
