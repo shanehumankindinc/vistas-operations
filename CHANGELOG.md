@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-06-30: Cleaner Performance Report system
+
+What changed: Monthly HTML performance reports can now be generated per cleaning vendor and stored in Supabase Storage (`cleaner-reports` bucket). Admins access `/reports`, click "Generate Report", pick a market and date range, and reports are created per vendor, archived in `report_archive`, and served via signed URLs. Vendors can log in and see only their own report. A cron (`vercel.json`) auto-generates reports on the 1st of each month for all three markets.
+
+Report content: status label (TOP PERFORMER / FLAG / NEEDS COACHING etc.), KPI strip (quality score, on-time rate, cleans, issues filed), Celebrate section (5-star review quotes), Address section (low reviews + agreement reminders + short cleans + GS-filed issues), What's Next, and a data-accuracy disclaimer.
+
+Bug found and fixed during testing: Supabase Storage exact-matches MIME types — the bucket allows `text/html` but the upload was sending `text/html;charset=utf-8`, causing all uploads to fail silently with `{ generated: 0 }`. Fix: use `text/html` as `contentType` in the upload call.
+
+Why: Vendors previously had no visibility into their performance data. This gives each vendor a monthly report card they can review without accessing the internal dashboard.
+
+Operational follow-ups:
+- The `cleaner-reports` Storage bucket must remain private (already configured). Signed URLs expire; the archive route generates them fresh on each page load.
+- Vendor users need a `vendor_company` value matching `vendor_map.company_name` to see their report. Set this in Settings → Users.
+- Cron runs 1st of each month at 1am UTC (Branson), 1:05am (Deep Creek), 1:10am (Poconos) — covers the prior calendar month.
+- The `report_archive` table has a unique constraint on `(market, period_start, cleaner_company)` — re-generating the same period overwrites via upsert.
+
+---
+
 ## 2026-06-30: Fix gear icon — non-HttpOnly ops_ui cookie for client-side role
 
 What changed: The gear icon (Settings) now correctly appears for admin users. Root cause was that `ops_session` is an `HttpOnly` cookie, making it invisible to JavaScript — `currentUser` was always `null`, so the `role === "admin"` check always failed. Fix: login now sets a second cookie `ops_ui` (role + name only, no token) without the `HttpOnly` flag. `currentUser` in the dashboard reads `ops_ui` instead. Requires a fresh login to pick up the new cookie.
