@@ -26,7 +26,7 @@ export async function POST(req) {
   }
 
   const body = await req.json().catch(() => ({}));
-  return runGenerate({ ...body, dry: body.dry === true }, user.name || "admin");
+  return runGenerate(body, user.name || "admin");
 }
 
 export async function GET(req) {
@@ -53,7 +53,7 @@ export async function GET(req) {
   return runGenerate({ market, period_start, period_end }, "cron");
 }
 
-async function runGenerate({ market, period_start, period_end, dry }, createdBy) {
+async function runGenerate({ market, period_start, period_end }, createdBy) {
   if (!market || !MARKET_KEYS.includes(market)) {
     return Response.json({ error: "market must be one of: " + MARKET_KEYS.join(", ") }, { status: 400 });
   }
@@ -72,12 +72,9 @@ async function runGenerate({ market, period_start, period_end, dry }, createdBy)
   }
 
   const vendors = result.scorecard || [];
-  console.log(`[reports/generate] market=${market} period=${period_start}..${period_end} vendors=${vendors.length} meta=${JSON.stringify(result.meta)}`);
-  if (dry) {
-    return Response.json({ ok: true, dry: true, vendors: vendors.map(v => ({ vendor_name: v.vendor_name, total_cleans: v.total_cleans })), meta: result.meta });
-  }
+  console.log(`[reports/generate] market=${market} period=${period_start}..${period_end} vendors=${vendors.length}`);
   if (vendors.length === 0) {
-    return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period", meta: result.meta });
+    return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period" });
   }
 
   const generated = [];
