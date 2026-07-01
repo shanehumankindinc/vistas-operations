@@ -1,6 +1,6 @@
 import { getSupabase } from "@/lib/db";
 import { computeScorecard } from "@/lib/scorecard-data";
-import { buildCleanerReport } from "@/lib/report-builder";
+import { buildCleanerReport, buildProactiveReporting, buildCrewBreakdown } from "@/lib/report-builder";
 import { MARKET_KEYS } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +72,8 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
   }
 
   const vendors = result.scorecard || [];
+  const allReviews = result.reviews || [];
+  const allTasks = result.tasks || [];
   console.log(`[reports/generate] market=${market} period=${period_start}..${period_end} vendors=${vendors.length}`);
   if (vendors.length === 0) {
     return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period" });
@@ -85,7 +87,9 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
     const filePath = `${market}/${period_start}/${slug}.html`;
 
     try {
-      const html = buildCleanerReport(vendor, period_start, period_end);
+      const proactiveRows = buildProactiveReporting(vendor, allReviews, allTasks);
+      const crewBreakdown = buildCrewBreakdown(vendor, allTasks);
+      const html = buildCleanerReport(vendor, period_start, period_end, { proactiveRows, crewBreakdown });
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
