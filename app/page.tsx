@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -355,8 +355,14 @@ export default function Dashboard() {
     const ghost = topEl.firstElementChild as HTMLElement | null;
     if (ghost) ghost.style.width = scrollEl.scrollWidth + "px";
   }
-  useLayoutEffect(() => { syncTopWidth(summaryScrollRef.current, summaryTopRef.current); }, [rows, loading]);
-  useLayoutEffect(() => { syncTopWidth(drillScrollRef.current, drillTopRef.current); }, [drillCleaner, filterCrew]);
+  useEffect(() => {
+    const t = setTimeout(() => syncTopWidth(summaryScrollRef.current, summaryTopRef.current), 60);
+    return () => clearTimeout(t);
+  }, [rows, loading]);
+  useEffect(() => {
+    const t = setTimeout(() => syncTopWidth(drillScrollRef.current, drillTopRef.current), 60);
+    return () => clearTimeout(t);
+  }, [drillCleaner, filterCrew]);
   const panelIssues = useMemo((): PanelIssue[] => {
     if (!showIssuesPanel) return [];
     // When opened from a task-row click (issuesPanelLinkedIds set), search ALL vendors
@@ -374,7 +380,10 @@ export default function Dashboard() {
     return filtered.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
   }, [showIssuesPanel, issuesPanelVendor, issuesPanelLinkedIds, rows, filterCrew]);
 
-  useLayoutEffect(() => { syncTopWidth(issueScrollRef.current, issueTopRef.current); }, [showIssuesPanel, panelIssues]);
+  useEffect(() => {
+    const t = setTimeout(() => syncTopWidth(issueScrollRef.current, issueTopRef.current), 60);
+    return () => clearTimeout(t);
+  }, [showIssuesPanel, panelIssues]);
 
   const cleanerOptions = useMemo(() => [
     { key: "all", label: "All Cleaners" },
@@ -575,12 +584,12 @@ export default function Dashboard() {
             <>
               <div ref={issueTopRef}
                 onScroll={e => { if (issueScrollRef.current) issueScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-                style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9", flexShrink: 0 }}>
-                <div style={{ height: 1 }} />
+                style={{ overflowX: "auto", overflowY: "hidden", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
+                <div style={{ height: 6 }} />
               </div>
               <div ref={issueScrollRef}
                 onScroll={e => { if (issueTopRef.current) issueTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-                style={{ overflowX: "auto" }}>
+                style={{ overflowX: "auto", overflowY: "visible" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
@@ -742,17 +751,17 @@ export default function Dashboard() {
             <div style={{ padding: "10px 16px", borderBottom: "1px solid #f1f5f9", fontSize: 12, color: "#9ca3af" }}>
               {tasks.length} cleans &nbsp;·&nbsp; On-time rate applies to cleaning tasks only
             </div>
-            {/* Top horizontal scrollbar */}
+            {/* Top horizontal scrollbar — ghost div width set by useEffect */}
             <div ref={drillTopRef}
               onScroll={e => { if (drillScrollRef.current) drillScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-              style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9" }}>
-              <div style={{ height: 1 }} />
+              style={{ overflowX: "auto", overflowY: "hidden", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0" }}>
+              <div style={{ height: 6 }} />
             </div>
             <div ref={drillScrollRef}
               onScroll={e => { if (drillTopRef.current) drillTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-              style={{ overflowX: "auto" }}>
+              style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 300px)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead style={{ position: "sticky", top: 52, zIndex: 10 }}>
+                <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
                     <DrillTh col="scheduled_date" label="Sched Date" right={false} />
                     <DrillTh col="property_name" label="Property" right={false} />
@@ -923,17 +932,17 @@ export default function Dashboard() {
 
           {!loading && rows.length > 0 && (
             <>
-              {/* Top horizontal scrollbar */}
+              {/* Top horizontal scrollbar — ghost div width set by useEffect */}
               <div ref={summaryTopRef}
                 onScroll={e => { if (summaryScrollRef.current) summaryScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-                style={{ overflowX: "auto", overflowY: "hidden", height: 10, background: "#f1f5f9", borderRadius: "8px 8px 0 0" }}>
-                <div style={{ height: 1 }} />
+                style={{ overflowX: "auto", overflowY: "hidden", background: "#f1f5f9", borderRadius: "8px 8px 0 0", borderBottom: "1px solid #e2e8f0" }}>
+                <div style={{ height: 6 }} />
               </div>
               <div ref={summaryScrollRef}
                 onScroll={e => { if (summaryTopRef.current) summaryTopRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft; }}
-                style={{ overflowX: "auto" }}>
+                style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 260px)" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead style={{ position: "sticky", top: 52, zIndex: 10 }}>
+                <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
                   <tr style={{ background: "#1e2a3a" }}>
                     <Th k="vendor_name" label="Cleaner" right={false} />
                     <Th k="total_cleans" label="Cleans" />
