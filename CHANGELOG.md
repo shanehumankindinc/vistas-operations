@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-07-01: Report PDF download, score colors, tier action notes, crew quality flag
+
+What changed: Four improvements to the generated report HTML.
+
+1. **PDF download with naming convention**: Replaced the "Print / Save as PDF" button with "Download PDF". Clicking it sets `document.title` to `{VendorSlug}_{Mon-YYYY}_Performance-Report` before calling `window.print()`, then restores it after 1s. The browser uses `document.title` as the suggested PDF filename, so the saved file is named correctly without a server-side PDF library.
+
+2. **Review score colors in proactive table**: Non-complaint rows now show the cleanliness score in color rather than plain text. 5★ = green (#065f46), 4.7–4.9★ = neutral, 4–4.6★ = amber (#b45309), ≤3★ = red (#b91c1c). Complaint rows still show the AI-extracted excerpt and are unaffected.
+
+3. **Tier chips expanded to human-readable action notes**: The compact "T1/T2/T3" chips now show a plain-language label ("Tier 1", "Tier 2", "Tier 3 — Urgent") with an italic action sentence below: Tier 1 = "Try to clean or fix it before leaving. Create a Breezeway task if it needs more than a quick fix." Tier 2 = "Try to fix it on the spot. If you can't resolve it, file a Breezeway task before leaving." Tier 3 = "Do not attempt to fix it. File an urgent Breezeway task and call Guest Services immediately."
+
+4. **Crew table quality score red when below 4.7**: In the crew breakdown table, any individual crew member with a quality score below 4.7 now shows their score in red (#b91c1c, bold). Scores at or above 4.7 remain the default color.
+
+Why: Cleaners didn't know what T1/T2/T3 meant. The PDF filename was generic ("Untitled" or the page title). Score colors make performance visible at a glance without explaining the threshold in text.
+
+---
+
 ## 2026-07-01: Reports page — filters, pagination, export, and tier classification
 
 What changed: Four improvements to the cleaner report system.
