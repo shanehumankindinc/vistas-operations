@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 
 const SHEET_ID = "10VuBl4aDZci89lHiDLayWNd7U-uznTD24emFFu-F3m0";
 const SHEET_NAME = "Tasks";
+const PROPERTIES_SHEET = "Properties";
 const MARKET = "deep_creek";
 
 // Minimal RFC-4180-compliant CSV parser (handles quoted fields, embedded commas, escaped quotes).
@@ -58,11 +59,51 @@ function parseCSV(text) {
   return rows;
 }
 
+// Fetch a sheet from the public Google Sheets doc and return parsed rows.
+async function fetchSheet(sheetName) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google Sheets fetch failed for "${sheetName}": ${res.status}`);
+  return parseCSV(await res.text());
+}
+
+// Build listing_id lookup maps from the Properties sheet.
+// Returns { displayMap, nameMap } where keys are lowercased strings.
+// displayMap: "Property Display" value -> guesty_id (exact match on the Tasks "Property" field)
+// nameMap: "Property Name" -> guesty_id (fallback)
+// Skips rows where Guesty ID is LOCAL-HQ (Office HQ placeholder).
+// For duplicate property names, last row wins (most recently added entry in the sheet).
+function buildPropertyMaps(rows) {
+  if (rows.length < 2) return { displayMap: {}, nameMap: {} };
+
+  const headers = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  const nameIdx    = headers.indexOf("property_name");
+  const guestyIdx  = headers.indexOf("guesty_id");
+  const displayIdx = headers.indexOf("property_display");
+
+  const displayMap = {};
+  const nameMap = {};
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const guestyId = r[guestyIdx]?.trim();
+    if (!guestyId || guestyId === "LOCAL-HQ") continue;
+
+    const propName    = r[nameIdx]?.trim();
+    const propDisplay = r[displayIdx]?.trim();
+
+    if (propDisplay) displayMap[propDisplay.toLowerCase()] = guestyId;
+    if (propName)    nameMap[propName.toLowerCase()]       = guestyId;
+  }
+
+  return { displayMap, nameMap };
+}
+
 // Runs at 6am UTC daily.
 // Pulls the Tasks sheet from the Deep Creek timesheet Google Sheets doc (public viewer access).
+// Pulls the Properties sheet to resolve listing_id directly from the sheet's Guesty ID column.
 // Splits the Property field into property_name and property_address on " | ".
-// Resolves listing_id from guesty_properties.nickname for deep_creek market.
-// Full upsert on every run — all historical rows, deduped by the sheet's own ID column.
+// Full upsert on every run -- all historical rows, deduped by the sheet's own ID column.
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -71,24 +112,21 @@ export async function GET(req) {
 
   const supabase = getSupabase();
 
-  // Fetch CSV from public Google Sheet
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
-  const res = await fetch(csvUrl);
-  if (!res.ok) {
-    return Response.json(
-      { error: `Google Sheets fetch failed: ${res.status}` },
-      { status: 502 }
-    );
-  }
-  const csvText = await res.text();
+  // Fetch both sheets concurrently
+  const [tasksRows, propertiesRows] = await Promise.all([
+    fetchSheet(SHEET_NAME),
+    fetchSheet(PROPERTIES_SHEET),
+  ]);
 
-  const allRows = parseCSV(csvText);
-  if (allRows.length < 2) {
-    return Response.json({ ok: true, upserted: 0, reason: "empty sheet" });
+  if (tasksRows.length < 2) {
+    return Response.json({ ok: true, upserted: 0, reason: "empty tasks sheet" });
   }
+
+  // Build property lookup maps from the Properties sheet (authoritative Guesty ID source)
+  const { displayMap, nameMap } = buildPropertyMaps(propertiesRows);
 
   // Map headers by name so column order changes don't break parsing
-  const headers = allRows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  const headers = tasksRows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
   const col = (name) => headers.indexOf(name);
 
   const idIdx    = col("id");
@@ -101,22 +139,11 @@ export async function GET(req) {
   const totalIdx = col("total_time");
   const userIdx  = col("user");
 
-  // Build nickname -> listing_id lookup for deep_creek
-  const { data: properties } = await supabase
-    .from("guesty_properties")
-    .select("id, nickname")
-    .eq("market", MARKET);
-
-  const nicknameMap = {};
-  for (const p of properties || []) {
-    nicknameMap[p.nickname.trim().toLowerCase()] = p.id;
-  }
-
   const rows = [];
   const unmatched = new Set();
 
-  for (let i = 1; i < allRows.length; i++) {
-    const r = allRows[i];
+  for (let i = 1; i < tasksRows.length; i++) {
+    const r = tasksRows[i];
     const rowId = r[idIdx]?.trim();
     if (!rowId) continue;
 
@@ -133,19 +160,24 @@ export async function GET(req) {
       } else {
         propertyName = propertyRaw;
       }
-      listingId = nicknameMap[propertyName.toLowerCase()] || null;
+
+      // Match by full "Property Display" value first (exact), then by property name alone
+      listingId =
+        displayMap[propertyRaw.toLowerCase()] ||
+        (propertyName ? nameMap[propertyName.toLowerCase()] : null) ||
+        null;
+
       if (!listingId && propertyName !== "Office (HQ)") {
         unmatched.add(propertyName);
       }
     }
 
-    // Parse date string — sheet stores as MM/DD/YYYY
+    // Parse date string -- sheet format is DD/MM/YYYY
     let dateVal = null;
     const rawDate = r[dateIdx]?.trim();
     if (rawDate) {
       const parts = rawDate.split("/");
       if (parts.length === 3) {
-        // Sheet format is DD/MM/YYYY
         dateVal = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
     }
@@ -184,6 +216,7 @@ export async function GET(req) {
     ok: true,
     total_rows: rows.length,
     upserted,
+    properties_mapped: Object.keys(displayMap).length,
     unmatched_property_names: [...unmatched],
   });
 }
