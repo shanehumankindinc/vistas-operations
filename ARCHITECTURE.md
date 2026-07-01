@@ -120,6 +120,25 @@ Populated by `cron/checkins`. Contains upcoming reservations (check-in from toda
 
 **Important:** `guesty_checkins` only holds FUTURE reservations. The Guesty `/v1/reservations` endpoint with date filters returns only upcoming check-ins regardless of statuses requested. Historical checkout dates are not available via this table.
 
+### `property_calendar`
+Populated by `cron/property-calendar` (8am UTC). One row per listing per day for today through today+14. Rows older than today are deleted each run to keep the table lean (max 15 rows per property at any time). Guest data is sourced from `guesty_checkins`; owner blocks are fetched live from Guesty `/v1/owners-reservations` during the cron.
+
+| Column | Notes |
+|--------|-------|
+| `listing_id` | Guesty listing ID |
+| `market` | `branson` / `deep_creek` / `poconos` |
+| `date` | Calendar date (PK with listing_id + market) |
+| `day_type` | `vacant`, `checkin`, `checkout`, `turn`, `stayover`, or `owner_block` |
+| `reservation_id` | Guesty reservation ID (null for vacant/owner_block) |
+| `confirmation_code` | Guesty confirmation code (null for vacant/owner_block) |
+| `check_in_date` | Check-in date of the overlapping reservation or owner block |
+| `check_out_date` | Check-out date of the overlapping reservation or owner block |
+| `owner_id` | Guesty owner ID (owner_block rows only) |
+| `owner_name` | Owner full name (owner_block rows only) |
+| `pulled_at` | When the cron computed this row |
+
+Day type priority: `turn > checkin > checkout > stayover > owner_block > vacant`. A `turn` is when a checkout and checkin occur on the same day (cleaner between guests).
+
 ### `guesty_refunds`
 Populated by `cron/guesty-sync`. One row per reservation with a refund reason custom field value. Read-only from data serving paths.
 

@@ -25,6 +25,8 @@
 
 - **Vendor session cookie decoding** — `/api/data` decodes the `ops_session` cookie server-side using `Buffer.from(data, "base64url").toString()` (the payload is the first `.`-delimited segment). The HMAC is NOT re-verified here (middleware already did that); the decode is just for role/market enforcement. If you add new data endpoints, copy the `getSessionUser` helper from `api/data/route.js` and apply the same vendor guard.
 
+- **Owner blocks are NOT in `/v1/reservations`** — They live in a completely separate endpoint: `/v1/owners-reservations`. The `statuses` filter on `/v1/reservations` is silently ignored and does not return owner blocks regardless of what status you pass. Use `fetchOwnerReservations(market)` from `lib/guesty.js` for owner block data.
+
 - **Deployment source is GitHub, not local** — Vercel deploys from `shanehumankindinc/vistas-operations` (master branch). The local copy at `C:\Users\shane\Downloads\vistas-operations` is a diverged clone — do not use it. All changes must go through `C:\Users\shane\Downloads\vistas-operations-git` and be pushed to master.
 
 - **Never paste API keys in chat** — they end up in GitHub commit history and get auto-revoked by Mandrill's (and other providers') secret scanners. Always set secrets directly in Vercel env vars UI.

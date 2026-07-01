@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-07-01: Property calendar occupancy cron (today + 14 days)
+
+What changed: New daily cron at 8am UTC (`/api/cron/property-calendar`) computes per-property per-day occupancy status for every property across all three markets, covering today through today+14. Output lands in a new `property_calendar` Supabase table. Rows older than today are deleted each run to keep the table lean (max 15 rows per property at any time).
+
+Day type values (priority order): `turn` (checkout + checkin same day), `checkin`, `checkout`, `stayover` (mid-stay), `owner_block`, `vacant`.
+
+Guest reservations are read from `guesty_checkins` (already synced by the 7am checkins cron — no extra API call). Owner blocks are fetched live from Guesty `/v1/owners-reservations` (a completely separate endpoint from `/v1/reservations` — owner blocks do not appear in the regular reservations endpoint).
+
+Supporting changes: `fetchOwnerReservations(market)` added to `lib/guesty.js`; checkins cron forward window extended from today+2 to today+16 so stayovers and upcoming reservations are pre-loaded before the 8am calendar cron runs.
+
+Why: Enables programmatic daily review of what is happening at each property over the next two weeks without maintaining historical data.
+
+Operational follow-ups: To manually trigger before first scheduled run, use `vercel crons run /api/cron/property-calendar`. The checkins cron must run first (or run it manually at `vercel crons run /api/cron/checkins`) or stayovers from before today won't appear. Owner blocks are always fetched live so no pre-requisite there.
+
+---
+
 ## 2026-07-01: Expand guesty_properties sync to capture all listing data
 
 What changed: `guesty_properties` now stores four additional fields from the Guesty listing object: `description` (text), `amenities` (jsonb array), `custom_fields` (jsonb array of `{ fieldId, value }` — includes gate codes, guest access, alarm codes, etc.), and `money` (jsonb — contains fees, pricing, currency). Supabase migration adds the columns. The sync cron code change adds 4 lines. Zero new API calls — `fetchAllListings` already returned this data; we were discarding it. Added `admin/debug-guesty-listing` route to inspect raw listing object shape by market and optional listing ID.
