@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-07-01: Reports page — filters, pagination, export, and tier classification
+
+What changed: Four improvements to the cleaner report system.
+
+1. **Complaint tier classification**: Each complaint row in the proactive reporting table now shows a tier badge alongside the task status. T1 (blue) = fix yourself (dirty surface, missing consumable); T2 (amber) = try to fix, then file a Breezeway task (TV, wi-fi, pilot light); T3 (red) = do not attempt, file urgent task and call Guest Services (safety issues). The AI classifies each complaint into a tier as a 6th output field (`complaint_tiers`). `max_tokens` bumped 900 → 1100.
+
+2. **Export / Print button**: Each generated report now includes a "Print / Save as PDF" button at the top. It calls `window.print()` — browsers offer "Save as PDF" in the print dialog. Button is hidden in the print output via `@media print { .no-print { display:none } }`.
+
+3. **Reports page filters and pagination**: The `/reports` page now has year, month, and cleaner dropdown filters (admin/employee only for cleaner and market). Filtering is client-side against the full row set loaded on mount. Results are grouped by period and paginated 4 groups per page with prev/next controls and a result count.
+
+4. **Vendor access control (already existed, confirmed)**: `GET /api/reports` and `GET /api/reports/[id]` already enforce vendor isolation server-side — vendors see only their own company's reports and get 403 on cross-company access. No changes needed.
+
+Why: Reports will accumulate over time (3 markets × ~10 vendors × 12 months = ~360 rows per year). The filter and pagination changes prevent the list from becoming unmanageable. Export was requested so cleaners and managers can archive PDF copies. Tier classification communicates what accountability level was expected for each complaint.
+
+---
+
 ## 2026-07-01: Chronic miss detection in proactive reporting
 
 What changed: Vendors who repeatedly clean a property without ever filing a maintenance task are now flagged differently from one-time misses.
