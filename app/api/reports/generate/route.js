@@ -73,19 +73,19 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
   }
 
   const vendors = result.scorecard || [];
-  const allReviews = result.reviews || [];
   const allTasks = result.tasks || [];
   console.log(`[reports/generate] market=${market} period=${period_start}..${period_end} vendors=${vendors.length}`);
   if (vendors.length === 0) {
     return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period" });
   }
 
-  // Phase 1: pre-compute proactive rows and briefs for all vendors (no I/O)
+  // Phase 1: pre-compute crew breakdowns and AI briefs for all vendors (no I/O).
+  // Proactive rows are NOT pre-computed here — they're built after the AI call
+  // so AI complaint classification drives the proactive table, not keyword matching.
   const vendorData = vendors.map((vendor) => {
-    const proactiveRows = buildProactiveReporting(vendor, allReviews, allTasks);
     const crewBreakdown = buildCrewBreakdown(vendor, allTasks);
-    const brief = buildVendorBrief(vendor, proactiveRows, market);
-    return { vendor, proactiveRows, crewBreakdown, brief };
+    const brief = buildVendorBrief(vendor, market);
+    return { vendor, crewBreakdown, brief };
   });
 
   // Phase 2: fire all AI calls in parallel — failures fall back to template silently
@@ -106,8 +106,11 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
   const errors = [];
 
   for (let i = 0; i < vendorData.length; i++) {
-    const { vendor, proactiveRows, crewBreakdown } = vendorData[i];
+    const { vendor, crewBreakdown } = vendorData[i];
     const aiSections = aiResults[i];
+    // Build proactive rows using AI complaint classification when available.
+    // Falls back to keyword matching when aiSections is null (no key / API failure).
+    const proactiveRows = buildProactiveReporting(vendor, allTasks, aiSections?.complaint_indices ?? null);
     const slug = slugify(vendor.vendor_name);
     const filePath = `${market}/${period_start}/${slug}.html`;
 
