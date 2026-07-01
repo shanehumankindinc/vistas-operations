@@ -60,7 +60,7 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
 function KpiChips({ s }: { s: ReportSummary }) {
   const chips: { label: string; warn?: boolean }[] = [];
   if (s.cleans != null) chips.push({ label: `${s.cleans} cleans` });
-  if (s.quality_score != null) chips.push({ label: `${s.quality_score.toFixed(2)} quality`, warn: s.quality_score < 4.8 });
+  if (s.quality_score != null) chips.push({ label: `${s.quality_score.toFixed(2)} quality`, warn: s.quality_score < 4.7 });
   if (s.on_time_pct != null) chips.push({ label: `${s.on_time_pct}% on-time`, warn: s.on_time_pct < 90 });
   if (s.tasks_filed != null) chips.push({ label: `${s.tasks_filed} tasks filed`, warn: s.tasks_filed === 0 && (s.cleans ?? 0) >= 5 });
   if ((s.missed_complaints ?? 0) > 0) chips.push({ label: `${s.missed_complaints} missed complaint${s.missed_complaints !== 1 ? "s" : ""}`, warn: true });
