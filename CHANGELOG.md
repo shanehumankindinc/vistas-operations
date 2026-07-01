@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-07-01: AI-generated report prose via claude-haiku-4-5
+
+What changed: Three sections of each cleaner report are now written by claude-haiku-4-5 instead of template strings: CELEBRATE (2-4 sentence paragraph referencing specific properties and maintenance examples), ADDRESS intro (1-2 sentences contextualizing the specific issues before the data lists), and THIS MONTH DO THIS (one imperative sentence). KPI strip, proactive reporting table, and crew breakdown remain template-generated for data accuracy.
+
+Architecture: `lib/report-ai.js` — `buildVendorBrief()` compresses each vendor's data to a ~400-token JSON brief (top 3 quotes, low reviews, short/late cleans, maintenance examples, proactive miss count). `generateAISections()` calls `claude-haiku-4-5-20251001` via the Anthropic API and returns validated JSON `{ celebrate, address, one_ask }`. The generate route fires all vendor AI calls in parallel via `Promise.allSettled` — any failure falls back to template output silently, report generation never blocks.
+
+Why: Template strings cannot reference specific property names, adjust tone for context (e.g. "isolated slip" vs repeated pattern), or write prose that feels addressed to the specific vendor. AI prose costs under $0.05 for a full 3-market generation run.
+
+Operational follow-ups:
+- `ANTHROPIC_API_KEY` must be set in `vistas-operations` Vercel env vars (Production). Without it, generation falls back to template silently.
+- AI failures per vendor are logged as warnings in Vercel runtime logs: `[reports/generate] AI failed for "..."`.
+
+---
+
+## 2026-07-01: Fix ADDRESS keyword callouts + smarter complaint excerpts
+
+What changed: Removed the "Agreement reminders from guest feedback" block from the ADDRESS section — it ran `scanReviewText()` across all reviews including 5-star positive ones, producing false positives like "Guests mentioned deck — review Section 1c" from a guest saying the deck view was great. No sentiment check existed. Replaced `slice(0, 89)` excerpt logic in the proactive reporting table with `extractComplaintExcerpt()`: splits the review into sentences and finds the first one containing a negative signal word (unfortunately, broken, missing, smell, etc.) so the excerpt shows the actual complaint rather than the positive opener that typically precedes it.
+
+Why: The keyword block was noise layered on top of the PROACTIVE REPORTING table which already surfaces real accountability data. The excerpt truncation was hiding the meaningful part of every complaint.
+
+---
+
 ## 2026-06-30: Redesign cleaner report — proactive reporting + crew breakdown
 
 What changed: Cleaner performance reports are now written for the cleaner to read directly (not management). Four files changed:
