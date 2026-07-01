@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-07-01: Post-audit bug fixes — AI report prose quality
+
+What changed: Three bugs found during live report audit and fixed.
+
+1. **AI leaking internal field names in prose**: Haiku was writing "Review idx 32 at Pointe Royale..." because the `all_reviews` brief used `idx` as a field name. Renamed to `_i` (cryptic, underscore-prefixed) to make it syntactically unnatural to verbalize. Added prescriptive example to address guidance: "say 'Pointe Royale scored a 3' not 'Review _i 5'". Added prohibition rule to SYSTEM_PROMPT.
+
+2. **`extractComplaintExcerpt` returning trivially short strings**: A review with effectively no text produced excerpt `"."` which is truthy — the display showed `"."` instead of falling through to the "no written comment" fallback. Fixed by returning `null` for excerpts under 4 characters.
+
+3. **`one_ask` priority misprioritized by AI**: AI was choosing priority (1) language (file maintenance tasks) even when `complaint_indices` was empty, overriding short_clean priority. Rewrote one_ask priority instruction with explicit "SKIP this priority if complaint_indices is [] or absent" guard.
+
+Why: Live audit of 5 Branson reports revealed these patterns. All 3 verified fixed by regenerating reports after deploy.
+
+---
+
 ## 2026-07-01: AI-generated report prose via claude-haiku-4-5
 
 What changed: Three sections of each cleaner report are now written by claude-haiku-4-5 instead of template strings: CELEBRATE (2-4 sentence paragraph referencing specific properties and maintenance examples), ADDRESS intro (1-2 sentences contextualizing the specific issues before the data lists), and THIS MONTH DO THIS (one imperative sentence). KPI strip, proactive reporting table, and crew breakdown remain template-generated for data accuracy.
