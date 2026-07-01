@@ -182,7 +182,7 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
 
     // Build proactive rows using AI complaint classification when available.
     // Falls back to keyword matching when aiSections is null (no key / API failure).
-    const proactiveRows = buildProactiveReporting(vendor, allTasks, aiSections?.complaint_indices ?? null, lifetimeMaintByProperty);
+    const proactiveRows = buildProactiveReporting(vendor, allTasks, aiSections?.complaint_indices ?? null, lifetimeMaintByProperty, aiSections?.complaint_excerpts ?? {});
     const slug = slugify(vendor.vendor_name);
     const filePath = `${market}/${period_start}/${slug}.html`;
 
