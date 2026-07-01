@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-06-30: Redesign cleaner report — proactive reporting + crew breakdown
+
+What changed: Cleaner performance reports are now written for the cleaner to read directly (not management). Four files changed:
+
+- `lib/keywords.js` — added `hasPhysicalComplaint()` to detect Section 3-relevant complaints in review text (physical damage, missing items, odor, pests, etc.)
+- `lib/scorecard-data.js` — `computeScorecard` now returns `{ scorecard, reviews, tasks, meta }` so the generate route can use raw reviews and tasks without a second DB round-trip
+- `lib/report-builder.js` — full rewrite:
+  - `buildProactiveReporting()`: for each complaint review at a vendor's properties (triggered by cleanliness < 4 OR physical complaint keywords), checks whether the vendor filed a Breezeway maintenance task before the guest submitted the review. Returns a table row per complaint with task-filed status.
+  - `buildCrewBreakdown()`: groups enriched tasks by individual name; returns per-crew stats (cleans, quality, on-time, tasks filed) only when vendor has 2+ distinct individuals. Returns null for solo operators (section omitted).
+  - New section order: CELEBRATE (5-star quotes with property attribution + named task examples) → ADDRESS (agreement callouts with property+date, short/late clean specifics) → PROACTIVE REPORTING (table: property / last clean / guest said / task filed?) → YOUR CREW (optional) → THIS MONTH DO THIS (single computed ask)
+- `app/api/reports/generate/route.js` — imports updated, computes `proactiveRows` and `crewBreakdown` per vendor before calling `buildCleanerReport`
+
+Why: Previous reports were written as manager briefing documents (CONVERSATION FRAMING, DISCUSS sections). Reports now speak directly to the cleaner, call out specific accountability items by agreement section, and show crew-level performance for companies with multiple staff.
+
+Operational follow-ups:
+- Proactive reporting accuracy depends on review `submitted_at` vs task `created_at` timestamps. A task filed after the guest complained will correctly show as ✗ Missed.
+- Crew breakdown requires `individual_name` populated on `enriched_tasks` (comes from `vendor_map` individual→company resolution). Solo operators get no crew table.
+- Re-generate any existing reports to pick up the new format.
+
+---
+
 ## 2026-06-30: Fix [id] route — await params (Next.js 15+ required)
 
 What changed: `/api/reports/[id]` was returning 404 for all valid report IDs. Root cause: in Next.js 15+, `params` is a Promise — synchronous access (`params.id`) returns `undefined`, so the Supabase query matched nothing. Fix: `const { id } = await params`.
