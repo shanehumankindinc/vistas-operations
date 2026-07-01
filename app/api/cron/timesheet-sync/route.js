@@ -145,7 +145,8 @@ export async function GET(req) {
     if (rawDate) {
       const parts = rawDate.split("/");
       if (parts.length === 3) {
-        dateVal = `${parts[2]}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
+        // Sheet format is DD/MM/YYYY
+        dateVal = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
     }
 
