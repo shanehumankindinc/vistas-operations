@@ -102,15 +102,87 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
     });
   }
 
+  // Phase 3: Determine which vendor-property pairs have had zero lifetime maintenance tasks
+  // filed by that vendor's team. One bulk DB query covers all complaint properties across all
+  // vendors — runs only when AI found complaints (typically 0-3 properties per run).
+  //
+  // Key: `${vendorIndex}:${bz_property_id}` → integer count of lifetime tasks filed by vendor
+  // A count of 0 means the vendor has cleaned this property without ever documenting conditions.
+  const lifetimeMaintByVendorProperty = {};
+
+  const complaintPropertyIds = new Set();
+  for (let i = 0; i < vendorData.length; i++) {
+    const aiSections = aiResults[i];
+    if (!aiSections?.complaint_indices?.length) continue;
+    const enriched = vendorData[i].vendor.enriched_tasks || [];
+    for (const idx of aiSections.complaint_indices) {
+      const t = enriched[idx];
+      if (t?.bz_property_id) complaintPropertyIds.add(t.bz_property_id);
+    }
+  }
+
+  if (complaintPropertyIds.size > 0) {
+    const { data: lifetimeTasks, error: ltErr } = await supabase
+      .from("breezeway_tasks")
+      .select("bz_property_id, created_by")
+      .eq("market", market)
+      .ilike("task_type", "%maintenance%")
+      .in("bz_property_id", [...complaintPropertyIds]);
+
+    if (ltErr) {
+      console.warn("[reports/generate] lifetime task query failed:", ltErr.message);
+    } else {
+      // Group: bz_property_id → [created_by strings, lowercased]
+      const taskCreatorsByProperty = {};
+      for (const row of lifetimeTasks || []) {
+        if (!taskCreatorsByProperty[row.bz_property_id]) taskCreatorsByProperty[row.bz_property_id] = [];
+        taskCreatorsByProperty[row.bz_property_id].push((row.created_by || "").toLowerCase().trim());
+      }
+
+      for (let i = 0; i < vendorData.length; i++) {
+        const { vendor } = vendorData[i];
+        const aiSections = aiResults[i];
+        if (!aiSections?.complaint_indices?.length) continue;
+
+        const enriched = vendor.enriched_tasks || [];
+        const vendorIndividuals = [
+          vendor.vendor_name.toLowerCase().trim(),
+          ...enriched.map((t) => (t.individual_name || "").toLowerCase().trim()).filter(Boolean),
+        ];
+
+        for (const idx of aiSections.complaint_indices) {
+          const task = enriched[idx];
+          if (!task?.bz_property_id) continue;
+          const propId = task.bz_property_id;
+          const creators = taskCreatorsByProperty[propId] || [];
+          const vendorCount = creators.filter((c) =>
+            vendorIndividuals.some((ind) => ind && c && (c.includes(ind) || ind.includes(c)))
+          ).length;
+          lifetimeMaintByVendorProperty[`${i}:${propId}`] = vendorCount;
+        }
+      }
+    }
+  }
+
   const generated = [];
   const errors = [];
 
   for (let i = 0; i < vendorData.length; i++) {
     const { vendor, crewBreakdown } = vendorData[i];
     const aiSections = aiResults[i];
+
+    // Build per-property lifetime map for this vendor from the bulk query result
+    const lifetimeMaintByProperty = {};
+    for (const [key, count] of Object.entries(lifetimeMaintByVendorProperty)) {
+      const colonIdx = key.indexOf(":");
+      if (parseInt(key.slice(0, colonIdx)) === i) {
+        lifetimeMaintByProperty[key.slice(colonIdx + 1)] = count;
+      }
+    }
+
     // Build proactive rows using AI complaint classification when available.
     // Falls back to keyword matching when aiSections is null (no key / API failure).
-    const proactiveRows = buildProactiveReporting(vendor, allTasks, aiSections?.complaint_indices ?? null);
+    const proactiveRows = buildProactiveReporting(vendor, allTasks, aiSections?.complaint_indices ?? null, lifetimeMaintByProperty);
     const slug = slugify(vendor.vendor_name);
     const filePath = `${market}/${period_start}/${slug}.html`;
 
