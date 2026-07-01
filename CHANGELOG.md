@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-06-30: Fix [id] route — await params (Next.js 15+ required)
+
+What changed: `/api/reports/[id]` was returning 404 for all valid report IDs. Root cause: in Next.js 15+, `params` is a Promise — synchronous access (`params.id`) returns `undefined`, so the Supabase query matched nothing. Fix: `const { id } = await params`.
+
+Why: Next.js 15 made dynamic route params async. Any route handler that destructures `params` synchronously will silently fail with 404.
+
+---
+
 ## 2026-06-30: Fix report rendering — proxy through [id] route
 
 What changed: "View Report" links now go through `/api/reports/[id]` instead of directly to Supabase Storage signed URLs. The route fetches the HTML from Storage and serves it with `Content-Type: text/html; charset=utf-8`. Side effect: the list endpoint (`/api/reports`) no longer generates signed URLs, removing ~8 serial Storage API calls per page load.
