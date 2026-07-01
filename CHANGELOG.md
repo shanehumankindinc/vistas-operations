@@ -2,6 +2,14 @@
 
 ---
 
+## 2026-06-30: Fix report rendering — proxy through [id] route
+
+What changed: "View Report" links now go through `/api/reports/[id]` instead of directly to Supabase Storage signed URLs. The route fetches the HTML from Storage and serves it with `Content-Type: text/html; charset=utf-8`. Side effect: the list endpoint (`/api/reports`) no longer generates signed URLs, removing ~8 serial Storage API calls per page load.
+
+Why: Supabase Storage served files without specifying charset, causing browsers to decode UTF-8 as Latin-1 and display raw HTML source instead of rendering the report.
+
+---
+
 ## 2026-06-30: Cleaner Performance Report system
 
 What changed: Monthly HTML performance reports can now be generated per cleaning vendor and stored in Supabase Storage (`cleaner-reports` bucket). Admins access `/reports`, click "Generate Report", pick a market and date range, and reports are created per vendor, archived in `report_archive`, and served via signed URLs. Vendors can log in and see only their own report. A cron (`vercel.json`) auto-generates reports on the 1st of each month for all three markets.
