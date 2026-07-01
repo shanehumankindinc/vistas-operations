@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/db";
 import { computeScorecard } from "@/lib/scorecard-data";
 import { buildCleanerReport, buildProactiveReporting, buildCrewBreakdown } from "@/lib/report-builder";
+import { buildVendorBrief, generateAISections } from "@/lib/report-ai";
 import { MARKET_KEYS } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
@@ -79,17 +80,39 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
     return Response.json({ ok: true, generated: 0, message: "No vendor data found for this period" });
   }
 
+  // Phase 1: pre-compute proactive rows and briefs for all vendors (no I/O)
+  const vendorData = vendors.map((vendor) => {
+    const proactiveRows = buildProactiveReporting(vendor, allReviews, allTasks);
+    const crewBreakdown = buildCrewBreakdown(vendor, allTasks);
+    const brief = buildVendorBrief(vendor, proactiveRows, market);
+    return { vendor, proactiveRows, crewBreakdown, brief };
+  });
+
+  // Phase 2: fire all AI calls in parallel — failures fall back to template silently
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  let aiResults = vendorData.map(() => null); // default: no AI sections
+  if (apiKey) {
+    const settled = await Promise.allSettled(
+      vendorData.map(({ brief }) => generateAISections(brief, apiKey))
+    );
+    aiResults = settled.map((r, i) => {
+      if (r.status === "fulfilled") return r.value;
+      console.warn(`[reports/generate] AI failed for "${vendorData[i].vendor.vendor_name}": ${r.reason?.message}`);
+      return null;
+    });
+  }
+
   const generated = [];
   const errors = [];
 
-  for (const vendor of vendors) {
+  for (let i = 0; i < vendorData.length; i++) {
+    const { vendor, proactiveRows, crewBreakdown } = vendorData[i];
+    const aiSections = aiResults[i];
     const slug = slugify(vendor.vendor_name);
     const filePath = `${market}/${period_start}/${slug}.html`;
 
     try {
-      const proactiveRows = buildProactiveReporting(vendor, allReviews, allTasks);
-      const crewBreakdown = buildCrewBreakdown(vendor, allTasks);
-      const html = buildCleanerReport(vendor, period_start, period_end, { proactiveRows, crewBreakdown });
+      const html = buildCleanerReport(vendor, period_start, period_end, { proactiveRows, crewBreakdown, aiSections });
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
