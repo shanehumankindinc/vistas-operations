@@ -12,6 +12,16 @@ const MARKET_OPTIONS = [
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+type ReportSummary = {
+  status_label: string | null;
+  quality_score: number | null;
+  on_time_pct: number | null;
+  cleans: number | null;
+  tasks_filed: number | null;
+  missed_complaints: number | null;
+  complaint_count: number | null;
+};
+
 type ReportRow = {
   id: string;
   market: string;
@@ -21,6 +31,7 @@ type ReportRow = {
   report_type: string;
   cleaner_company: string | null;
   created_by: string | null;
+  summary: ReportSummary | null;
 };
 
 function formatPeriod(start: string, end: string) {
@@ -33,7 +44,40 @@ function formatMarket(m: string) {
   return { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" }[m] || m;
 }
 
-const GROUPS_PER_PAGE = 4; // number of period-groups shown per page
+const GROUPS_PER_PAGE = 4;
+
+const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
+  "TOP PERFORMER":                  { bg: "#1a7a3c", text: "#fff" },
+  "GREAT SCORES — LOG YOUR ISSUES": { bg: "#b91c1c", text: "#fff" },
+  "STRONG — ONE AREA TO IMPROVE":   { bg: "#0e7490", text: "#fff" },
+  "GOOD — TWO AREAS TO IMPROVE":    { bg: "#0e7490", text: "#fff" },
+  "ROOM TO GROW":                   { bg: "#b45309", text: "#fff" },
+  "ROOM TO GROW — START LOGGING":   { bg: "#b45309", text: "#fff" },
+  "ATTENTION NEEDED — LET'S TALK":  { bg: "#7f1d1d", text: "#fff" },
+  "BUILDING TRACK RECORD":          { bg: "#6b7280", text: "#fff" },
+};
+
+function KpiChips({ s }: { s: ReportSummary }) {
+  const chips: { label: string; warn?: boolean }[] = [];
+  if (s.cleans != null) chips.push({ label: `${s.cleans} cleans` });
+  if (s.quality_score != null) chips.push({ label: `${s.quality_score.toFixed(2)} quality`, warn: s.quality_score < 4.8 });
+  if (s.on_time_pct != null) chips.push({ label: `${s.on_time_pct}% on-time`, warn: s.on_time_pct < 90 });
+  if (s.tasks_filed != null) chips.push({ label: `${s.tasks_filed} tasks filed`, warn: s.tasks_filed === 0 && (s.cleans ?? 0) >= 5 });
+  if ((s.missed_complaints ?? 0) > 0) chips.push({ label: `${s.missed_complaints} missed complaint${s.missed_complaints !== 1 ? "s" : ""}`, warn: true });
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+      {chips.map((c) => (
+        <span key={c.label} style={{
+          fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+          background: c.warn ? "#fef2f2" : "#f3f4f6",
+          color: c.warn ? "#b91c1c" : "#4b5563",
+          border: `1px solid ${c.warn ? "#fecaca" : "#e5e7eb"}`,
+        }}>{c.label}</span>
+      ))}
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -297,31 +341,43 @@ export default function ReportsPage() {
                   <span style={{ fontWeight: 400, marginLeft: 8 }}>({periodRows.length} report{periodRows.length !== 1 ? "s" : ""})</span>
                 </div>
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }}>
-                  {periodRows.map((row, i) => (
-                    <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "13px 18px", borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 2 }}>
-                          {row.cleaner_company || "Portfolio"}
+                  {periodRows.map((row, i) => {
+                    const s = row.summary;
+                    const statusColor = s?.status_label ? (STATUS_COLOR[s.status_label] || { bg: "#374151", text: "#fff" }) : null;
+                    return (
+                      <div key={row.id} style={{ display: "flex", alignItems: "flex-start", gap: 16, padding: "13px 18px", borderTop: i > 0 ? "1px solid #f3f4f6" : "none" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
+                              {row.cleaner_company || "Portfolio"}
+                            </span>
+                            {statusColor && s?.status_label && (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: statusColor.bg, color: statusColor.text, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
+                                {s.status_label}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: s ? 0 : 0 }}>
+                            {formatMarket(row.market)}
+                            {" · "}Generated {new Date(row.generated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </div>
+                          {s && <KpiChips s={s} />}
                         </div>
-                        <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                          {formatMarket(row.market)}
-                          {" · "}Generated {new Date(row.generated_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </div>
+                        {row.id ? (
+                          <a
+                            href={`/api/reports/${row.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ padding: "6px 14px", background: "#f0fdf4", color: "#1a7a3c", border: "1px solid #bbf7d0", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap", marginTop: 2 }}
+                          >
+                            View ↗
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: 12, color: "#9ca3af" }}>Unavailable</span>
+                        )}
                       </div>
-                      {row.id ? (
-                        <a
-                          href={`/api/reports/${row.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ padding: "6px 14px", background: "#f0fdf4", color: "#1a7a3c", border: "1px solid #bbf7d0", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}
-                        >
-                          View ↗
-                        </a>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "#9ca3af" }}>Unavailable</span>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}

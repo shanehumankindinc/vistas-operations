@@ -1,6 +1,6 @@
 import { getSupabase } from "@/lib/db";
 import { computeScorecard } from "@/lib/scorecard-data";
-import { buildCleanerReport, buildProactiveReporting, buildCrewBreakdown } from "@/lib/report-builder";
+import { buildCleanerReport, buildProactiveReporting, buildCrewBreakdown, assignStatusLabel } from "@/lib/report-builder";
 import { buildVendorBrief, generateAISections } from "@/lib/report-ai";
 import { MARKET_KEYS } from "@/lib/markets";
 
@@ -199,6 +199,19 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
 
       if (uploadError) throw new Error("Storage upload failed: " + uploadError.message);
 
+      // Snapshot the key metrics at generation time so the reports list can show them
+      // without re-fetching scorecard data.
+      const missedComplaints = proactiveRows.filter((r) => r.is_complaint && !r.task_filed).length;
+      const summary = {
+        status_label: assignStatusLabel(vendor.cleanliness_score, vendor.on_time_rate, vendor.total_cleans ?? 0, vendor.issues_created ?? 0),
+        quality_score: vendor.cleanliness_score != null ? +vendor.cleanliness_score.toFixed(2) : null,
+        on_time_pct: vendor.on_time_rate != null ? Math.round(vendor.on_time_rate * 100) : null,
+        cleans: vendor.total_cleans ?? 0,
+        tasks_filed: vendor.issues_created ?? 0,
+        missed_complaints: missedComplaints,
+        complaint_count: proactiveRows.filter((r) => r.is_complaint).length,
+      };
+
       // Record in archive table
       const { error: dbError } = await supabase
         .from("report_archive")
@@ -212,6 +225,7 @@ async function runGenerate({ market, period_start, period_end }, createdBy) {
             cleaner_company: vendor.vendor_name,
             file_url: filePath,
             created_by: createdBy,
+            summary,
           },
           { onConflict: "market,period_start,cleaner_company" }
         );
