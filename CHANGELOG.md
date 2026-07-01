@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-07-01: Fix timesheet-sync listing_id resolution via Properties sheet
+
+What changed: `timesheet-sync` cron now fetches the Properties sheet alongside the Tasks sheet and uses the `Guesty ID` column as the authoritative source for `listing_id` lookup, instead of fuzzy-matching against `guesty_properties.nickname`. Builds two lookup maps: `displayMap` (keyed by "Property Display" which matches the Tasks sheet's Property field exactly) and `nameMap` (keyed by Property Name as a fallback). Fetches both sheets in parallel, no extra latency.
+
+Why: 3 properties (`Tall Oaks Retreat`, `Life's A Bear`, `Wake n' Flakes`) were failing to resolve a listing_id because their nicknames in Guesty differed from what the Properties sheet used. The Properties sheet is maintained by the team and already has the correct Guesty IDs.
+
+Result: All 27 real properties now resolve a listing_id (only `Office (HQ)` is intentionally null, as it maps to the `LOCAL-HQ` sentinel in the Properties sheet which is excluded).
+
+---
+
 ## 2026-07-01: Property calendar occupancy cron (today + 14 days)
 
 What changed: New daily cron at 8am UTC (`/api/cron/property-calendar`) computes per-property per-day occupancy status for every property across all three markets, covering today through today+14. Output lands in a new `property_calendar` Supabase table. Rows older than today are deleted each run to keep the table lean (max 15 rows per property at any time).
