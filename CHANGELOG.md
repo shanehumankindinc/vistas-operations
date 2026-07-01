@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-07-01: Chronic miss detection in proactive reporting
+
+What changed: Vendors who repeatedly clean a property without ever filing a maintenance task are now flagged differently from one-time misses.
+
+1. **`low_activity_properties` in AI brief**: Properties cleaned 3+ times this period with zero tasks filed are passed to the AI. The SYSTEM_PROMPT address and one_ask guidance reference this list so the AI can call out the pattern explicitly in prose ("You've cleaned The 10th Hole 7 times this period with no maintenance tasks filed there").
+
+2. **Lifetime DB query (Phase 3 in generate route)**: After AI classification, a bulk query fetches all maintenance tasks ever filed by each vendor at complaint properties. One query across all vendors — only complaint properties are checked, so it's O(complaints), not O(vendors). Keyed as `vendorIndex:bz_property_id` → integer count.
+
+3. **`is_chronic_miss` flag**: `buildProactiveReporting` marks rows where vendor cleaned 3+ times this period and has zero lifetime tasks at that property. `computeOneAsk` elevates chronic miss to the top priority. `renderProactiveReporting` shows a distinct "Never documented" badge (darker red, bold) vs "Missed", with a subtext line: "Cleaned here Nx this period — no tasks on record".
+
+Why: The 10th Hole at Pointe Royale had 7 cleans in June, 0 lifetime maintenance tasks filed, guest complaints about carpet and odor. The old table showed it identically to a one-time miss. The chronic pattern needs different language and different visual weight.
+
+---
+
 ## 2026-07-01: Post-audit bug fixes — AI report prose quality
 
 What changed: Three bugs found during live report audit and fixed.
