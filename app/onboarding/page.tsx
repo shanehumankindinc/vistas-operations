@@ -167,7 +167,8 @@ export default function OnboardingPage() {
             icon="📋"
             title="Property Data"
             description="View and edit Zoho inspection submissions per property."
-            status="coming soon"
+            status="active"
+            href="/onboarding/submissions"
           />
         </div>
 
@@ -178,12 +179,14 @@ export default function OnboardingPage() {
   );
 }
 
-function ToolCard({ icon, title, description, status }: { icon: string; title: string; description: string; status: string }) {
-  return (
+function ToolCard({ icon, title, description, status, href }: { icon: string; title: string; description: string; status: string; href?: string }) {
+  const inner = (
     <div style={{
       background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10,
       padding: "20px 22px", display: "flex", flexDirection: "column", gap: 10,
       opacity: status === "coming soon" ? 0.75 : 1,
+      cursor: href ? "pointer" : "default",
+      transition: "box-shadow 0.15s",
     }}>
       <div style={{ fontSize: 28 }}>{icon}</div>
       <div>
@@ -200,6 +203,9 @@ function ToolCard({ icon, title, description, status }: { icon: string; title: s
       </div>
     </div>
   );
+
+  if (href) return <a href={href} style={{ textDecoration: "none" }}>{inner}</a>;
+  return inner;
 }
 
 function ZohoCount({ marketId }: { marketId: string | null }) {
