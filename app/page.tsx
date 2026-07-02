@@ -275,6 +275,7 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [view, setView] = useState<"performance" | "cleans">("performance");
   const [validatedIds, setValidatedIds] = useState<Set<string>>(new Set());
+  const [showValidated, setShowValidated] = useState(false);
 
   const loadUsers = useCallback(async () => {
     setSettingsLoading(true);
@@ -981,16 +982,49 @@ export default function Dashboard() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {view === "cleans" ? (
             <div style={{ padding: "24px 28px" }}>
-              <h1 style={{ margin: "0 0 4px 0", fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Completed Cleans</h1>
-              <p style={{ margin: "0 0 18px 0", fontSize: 13, color: "#6b7280" }}>
-                Cleans completed in the selected range. Check Validated when you have verified the clean.
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Completed Cleans</h1>
+                <button
+                  onClick={() => setShowValidated(v => !v)}
+                  style={{
+                    fontSize: 12, fontWeight: 600, padding: "6px 14px",
+                    border: `1px solid ${showValidated ? "#3b82f6" : "#e2e8f0"}`,
+                    borderRadius: 6, cursor: "pointer",
+                    background: showValidated ? "#eff6ff" : "#ffffff",
+                    color: showValidated ? "#1d4ed8" : "#64748b",
+                    flexShrink: 0,
+                  }}
+                >
+                  {showValidated ? "Hiding validated" : "Show validated"}
+                </button>
+              </div>
+              <p style={{ margin: "4px 0 18px 0", fontSize: 13, color: "#6b7280" }}>
+                Cleans completed in the selected range. Validated cleans are hidden by default — check to verify, uncheck to reopen.
               </p>
+              {(() => {
+                const displayedCleans = showValidated
+                  ? completedCleans
+                  : completedCleans.filter(c => !validatedIds.has(c.task_id));
+                const hiddenCount = completedCleans.length - displayedCleans.length;
+                return (
               <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "auto" }}>
                 {loading ? (
                   <div style={{ padding: "60px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>Loading…</div>
-                ) : completedCleans.length === 0 ? (
+                ) : displayedCleans.length === 0 && completedCleans.length === 0 ? (
                   <div style={{ padding: "60px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No completed cleans for this range.</div>
+                ) : displayedCleans.length === 0 ? (
+                  <div style={{ padding: "60px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
+                    All {completedCleans.length} clean{completedCleans.length !== 1 ? "s" : ""} validated.{" "}
+                    <button onClick={() => setShowValidated(true)} style={{ color: "#3b82f6", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 0, textDecoration: "underline" }}>Show them</button>
+                  </div>
                 ) : (
+                  <>
+                    {hiddenCount > 0 && !showValidated && (
+                      <div style={{ padding: "8px 14px", background: "#f0fdf4", borderBottom: "1px solid #dcfce7", fontSize: 12, color: "#16a34a", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span>{hiddenCount} validated clean{hiddenCount !== 1 ? "s" : ""} hidden</span>
+                        <button onClick={() => setShowValidated(true)} style={{ color: "#16a34a", background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0 }}>Show all</button>
+                      </div>
+                    )}
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: "#1e2a3a" }}>
@@ -1000,7 +1034,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {completedCleans.map((c, i) => (
+                      {displayedCleans.map((c, i) => (
                         <tr key={c.task_id} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafafa" }}>
                           <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>{MARKET_LABELS[c.market] || c.market}</td>
                           <td style={{ padding: "10px 14px", color: "#1a202c", fontWeight: 500 }}>{c.property}</td>
@@ -1024,8 +1058,11 @@ export default function Dashboard() {
                       ))}
                     </tbody>
                   </table>
+                  </>
                 )}
               </div>
+                );
+              })()}
             </div>
           ) : (
             <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
