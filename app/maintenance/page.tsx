@@ -8,6 +8,8 @@ const PropertyMap = dynamic(() => import("./PropertyMap"), { ssr: false, loading
   <div style={{ height: 340, borderRadius: 10, background: "#f1f5f9", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>Loading map…</div>
 ) });
 
+const ScheduleModal = dynamic(() => import("./ScheduleModal"), { ssr: false });
+
 type PropertyRow = {
   market: string;
   property: string;
@@ -258,6 +260,9 @@ export default function MaintenancePage() {
   const [sortKey, setSortKey] = useState<SortKey>("urgent_count");
   const [sortAsc, setSortAsc] = useState(false);
 
+  const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
+  const [scheduleRow, setScheduleRow] = useState<PropertyRow | null>(null);
+
   useEffect(() => {
     const match = document.cookie.match(/(?:^|;\s*)ops_ui=([^;]+)/);
     if (match) {
@@ -423,6 +428,7 @@ export default function MaintenancePage() {
           <PropertyMap
             rows={displayed}
             market={Array.from(markets)[0]}
+            focusProp={mapFocus}
           />
         )}
 
@@ -468,9 +474,31 @@ export default function MaintenancePage() {
                         onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}
                       >
                         {/* Property */}
-                        <td style={{ padding: "10px 14px", width: 190, maxWidth: 190 }}>
-                          <div style={{ fontWeight: 600, color: "#1a202c", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.property}>{row.property}</div>
-                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{MARKET_LABELS[row.market] || row.market}</div>
+                        <td style={{ padding: "10px 14px", width: 210, maxWidth: 210 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            {row.lat != null && row.lng != null && markets.size === 1 && (
+                              <button
+                                onClick={() => setMapFocus({ lat: row.lat!, lng: row.lng! })}
+                                title="Show on map"
+                                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1, flexShrink: 0 }}
+                              >🗺️</button>
+                            )}
+                            <div style={{ fontWeight: 600, color: "#1a202c", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }} title={row.property}>{row.property}</div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                            <div style={{ fontSize: 11, color: "#94a3b8" }}>{MARKET_LABELS[row.market] || row.market}</div>
+                            {openTasks.length > 0 && (
+                              <button
+                                onClick={() => setScheduleRow(row)}
+                                style={{
+                                  fontSize: 10, fontWeight: 600, padding: "2px 7px",
+                                  background: "#eff6ff", color: "#1d4ed8",
+                                  border: "1px solid #bfdbfe", borderRadius: 8,
+                                  cursor: "pointer", whiteSpace: "nowrap",
+                                }}
+                              >Schedule</button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Occupancy */}
@@ -563,6 +591,14 @@ export default function MaintenancePage() {
           </div>
         )}
       </div>
+
+      {scheduleRow && (
+        <ScheduleModal
+          row={scheduleRow}
+          date={date}
+          onClose={() => setScheduleRow(null)}
+        />
+      )}
     </div>
   );
 }
