@@ -7,6 +7,8 @@ type PropertyRow = {
   market: string;
   property: string;
   tomorrow: string;
+  check_in_date: string | null;
+  check_out_date: string | null;
   open_tasks: number;
   urgent_count: number;
   urgent_titles: string | null;
@@ -88,6 +90,28 @@ function isoMax()      { const d = new Date(); d.setDate(d.getDate() + 14); retu
 function fmtDate(iso: string) {
   const d = new Date(iso + "T12:00:00Z");
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function fmtShortDate(iso: string | null) {
+  if (!iso) return null;
+  const d = new Date(iso + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function occupancyDateLabel(type: string, checkIn: string | null, checkOut: string | null): string | null {
+  switch (type) {
+    case "checkin":
+    case "turn":
+      return checkIn ? `Check-in ${fmtShortDate(checkIn)}` : null;
+    case "checkout":
+      return checkOut ? `Check-out ${fmtShortDate(checkOut)}` : null;
+    case "guest_occupied":
+      return checkOut ? `Out ${fmtShortDate(checkOut)}` : null;
+    case "owner_occupied":
+      return checkOut ? `Out ${fmtShortDate(checkOut)}` : null;
+    default:
+      return null;
+  }
 }
 
 type SortKey = "property" | "market" | "open_tasks" | "urgent_count" | "avg_review";
@@ -355,7 +379,7 @@ export default function MaintenancePage() {
                     <Th k="avg_review" label="Avg Review" />
                     <th style={{ ...thBase, textAlign: "left", minWidth: 200 }}>Timesheet App 30d</th>
                     <th style={{ ...thBase, textAlign: "left", width: 260, minWidth: 160, maxWidth: 260 }}>Open Tasks</th>
-                    <th style={{ ...thBase, textAlign: "left", width: 220, minWidth: 140, maxWidth: 220 }}>Completed Tasks</th>
+                    <th style={{ ...thBase, textAlign: "left", width: 220, minWidth: 140, maxWidth: 220 }}>Completed Tasks 30d</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,6 +393,7 @@ export default function MaintenancePage() {
                     const timesheetEntries = parseTimesheetEntries(row.timesheet_30d);
                     const occ = DAY_TYPE_COLORS[row.tomorrow] || { bg: "#f1f5f9", text: "#64748b" };
                     const isDeepCreek = row.market === "deep_creek";
+                    const occDateLabel = occupancyDateLabel(row.tomorrow, row.check_in_date, row.check_out_date);
 
                     return (
                       <tr key={key}
@@ -387,6 +412,9 @@ export default function MaintenancePage() {
                           <span style={{ display: "inline-block", background: occ.bg, color: occ.text, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 10 }}>
                             {DAY_TYPE_LABELS[row.tomorrow] || row.tomorrow}
                           </span>
+                          {occDateLabel && (
+                            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{occDateLabel}</div>
+                          )}
                         </td>
 
                         {/* Open count */}
