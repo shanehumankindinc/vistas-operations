@@ -380,6 +380,7 @@ export default function MaintenancePage() {
         <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", marginRight: 28 }}>
           <span style={{ color: "#ffffff" }}>Vistas</span> Ops
         </span>
+        <a href="/onboarding" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>Onboarding</a>
         <a href="/" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>Cleaning</a>
         <a href="/maintenance" style={{ fontSize: 13, fontWeight: 500, color: "#ffffff", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid #ffffff" }}>Maintenance</a>
         <div style={{ flex: 1 }} />
