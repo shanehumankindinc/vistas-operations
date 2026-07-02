@@ -50,21 +50,31 @@ export async function GET(req) {
     const patchText = await patchRes.text();
     log.push({ step: "PATCH response", status: patchRes.status, body: patchText.slice(0, 1000) });
 
-    // 4. Try PUT if PATCH gives 405
-    if (patchRes.status === 405) {
-      const putRes = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}`, {
-        method: "PUT",
+    // 4. Try POST to assignment sub-resource (Breezeway likely uses a separate endpoint)
+    const assignBody = { user_id: rich.id };
+    const assignRes = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}/assignment`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(assignBody),
+    });
+    const assignText = await assignRes.text();
+    log.push({ step: "POST /assignment", status: assignRes.status, body: assignText.slice(0, 500) });
+
+    // 5. Try plural endpoint if singular 404s
+    if (assignRes.status === 404 || assignRes.status === 405) {
+      const assign2Res = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}/assignments`, {
+        method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(patchBody),
+        body: JSON.stringify(assignBody),
       });
-      const putText = await putRes.text();
-      log.push({ step: "PUT fallback", status: putRes.status, body: putText.slice(0, 1000) });
+      const assign2Text = await assign2Res.text();
+      log.push({ step: "POST /assignments", status: assign2Res.status, body: assign2Text.slice(0, 500) });
     }
 
-    // 5. Re-fetch task to see what changed
+    // 6. Re-fetch task to see what changed
     const getRes2 = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}`, { headers });
     const taskAfter = await getRes2.json().catch(() => null);
-    log.push({ step: "GET task after", status: getRes2.status, assigned_to: taskAfter?.assigned_to, finished_by: taskAfter?.finished_by, assignments: taskAfter?.assignments });
+    log.push({ step: "GET task after", status: getRes2.status, assignments: taskAfter?.assignments });
 
     return Response.json({ ok: true, log });
   } catch (err) {
