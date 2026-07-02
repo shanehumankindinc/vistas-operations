@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const PropertyMap = dynamic(() => import("./PropertyMap"), { ssr: false, loading: () => (
+  <div style={{ height: 340, borderRadius: 10, background: "#f1f5f9", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>Loading map…</div>
+) });
 
 type PropertyRow = {
   market: string;
@@ -9,6 +14,8 @@ type PropertyRow = {
   tomorrow: string;
   check_in_date: string | null;
   check_out_date: string | null;
+  lat: number | null;
+  lng: number | null;
   open_tasks: number;
   urgent_count: number;
   urgent_titles: string | null;
@@ -410,6 +417,14 @@ export default function MaintenancePage() {
             )}
           </div>
         </div>
+
+        {/* Map — visible when exactly one market is selected */}
+        {!loading && !error && markets.size === 1 && (
+          <PropertyMap
+            rows={displayed}
+            market={Array.from(markets)[0]}
+          />
+        )}
 
         {loading && <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8", fontSize: 14 }}>Loading...</div>}
         {error && <div style={{ textAlign: "center", padding: "60px 0", color: "#dc2626", fontSize: 14 }}>{error}</div>}
