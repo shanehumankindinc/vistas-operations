@@ -29,6 +29,14 @@
 
 - **Deployment source is GitHub, not local** — Vercel deploys from `shanehumankindinc/vistas-operations` (master branch). The local copy at `C:\Users\shane\Downloads\vistas-operations` is a diverged clone — do not use it. All changes must go through `C:\Users\shane\Downloads\vistas-operations-git` and be pushed to master.
 
+- **Breezeway `assigned_to` must be a Number, not a string** — `PATCH /inventory/v1/task/{id}` with `{ assigned_to: "427198" }` returns 422. Must send `{ assigned_to: 427198 }` (integer). Always cast with `Number(assigneeId)` before including in the patch body.
+
+- **Breezeway employee IDs come from `/inventory/v1/people`** — Use `GET /inventory/v1/people?limit=100&page=N` to get numeric person IDs for scheduling. Filter by `type_role` to internal roles: `administrator`, `supervisor`, `office`, `representative`. The `/company/v1/user` and `/v1/user` endpoints exist but return empty results. The people endpoint is the same one the sync cron uses.
+
+- **`property_status()` task_list format is 5 pipe-delimited segments** — `title | Xd old | url | priority | assignee`. The 5th segment (assignee) was added 2026-07-01. Any new parser should read all 5. Existing parsers that only read `parts[0..3]` still work since it's additive.
+
+- **Preview deployment URLs redirect to Vercel SSO** — Do not test auth-protected routes on Vercel preview URLs (`*.vercel.app` subdomain) — they redirect to Vercel's own auth. Always test on the production domain `vistas-operations.vercel.app` or add the path to the middleware bypass list for testing.
+
 - **Never paste API keys in chat** — they end up in GitHub commit history and get auto-revoked by Mandrill's (and other providers') secret scanners. Always set secrets directly in Vercel env vars UI.
 
 - **`/api/users` is admin-only** — all methods (GET, POST, PATCH, DELETE) check the session cookie server-side and return 403 for non-admins. The gear icon is also hidden client-side for non-admins. If you add new user-management endpoints, apply the same `requireAdmin(req)` guard from `api/users/route.js`.

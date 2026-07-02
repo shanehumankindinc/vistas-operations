@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-07-01: Maintenance page — Routes panel, Schedule modal, map improvements
+
+### Routes panel
+New "Routes" toggle in the sub-toolbar (between Map and Date). When active, the content area shifts left ~75% and a sticky 25%-wide sidebar appears listing scheduled tasks grouped by technician → property → task. Each employee shows avatar initials, task count, BZ deep-links, and age coloring (red for 7+ days old). Unassigned tasks are excluded and counted at the bottom.
+
+Routes data comes from `vendor_name` in the `breezeway_tasks` table (populated by the BZ sync cron at 5am UTC). If a task is scheduled via the Schedule modal, it won't appear in Routes until the next cron run.
+
+SQL: `property_status()` updated to append `| assignee` as a 5th pipe-delimited segment to each task line in `maintenance_tasks`. Non-breaking — all existing parsers that read only the first 4 segments still work.
+
+New file: `app/maintenance/RoutesPanel.tsx`.
+
+### Schedule modal
+Inline scheduling lightbox on any property row that has open tasks. Select one or more open tasks, pick an employee from a live-fetched Breezeway employee list, and save. Writes to Breezeway via `PATCH /inventory/v1/task/{id}` with `assigned_to` (numeric BZ person ID) and `scheduled_date`. Writes are sequential with 700ms delays between each to respect Breezeway API rate limits.
+
+New files: `app/maintenance/ScheduleModal.tsx`, `app/api/maintenance/schedule/route.js`, `app/api/maintenance/bz-users/route.js`.
+
+Employee list source: `GET /inventory/v1/people` (same endpoint as the sync cron), filtered to internal roles (`administrator`, `supervisor`, `office`, `representative`). Person IDs are numeric — must be sent as `Number()`, not string, or Breezeway returns 422.
+
+### Map improvements
+- Markers colored by occupancy type (green=check-in, blue=checkout, orange=turn, purple=occupied, amber=owner, grey=vacant)
+- Fire emoji (🔥) overlay on markers with urgent tasks
+- Popup shows occupancy chip, open/urgent counts, and top task names
+- 🗺️ emoji in the Property column flies the map to that property
+- Map toggle button (Hide Map / Show Map) — only visible when a single market is selected
+
+New file: `app/maintenance/PropertyMap.tsx` (full rewrite from prior version).
+
+Why: Maintenance page lacked scheduling capability. Routes gives a daily work-order view per technician. Map orientation helps visualize property clusters.
+
+Operational follow-ups: The BZ person ID for assignments is fetched live from Breezeway at modal open time. If a new employee doesn't appear in the dropdown, trigger a BZ sync to refresh the `vendor_map` table (though the employee list comes from BZ directly, not Supabase, so this is only for future Routes panel accuracy).
+
+---
+
 ## 2026-07-01: Fix timesheet-sync listing_id resolution via Properties sheet
 
 What changed: `timesheet-sync` cron now fetches the Properties sheet alongside the Tasks sheet and uses the `Guesty ID` column as the authoritative source for `listing_id` lookup, instead of fuzzy-matching against `guesty_properties.nickname`. Builds two lookup maps: `displayMap` (keyed by "Property Display" which matches the Tasks sheet's Property field exactly) and `nameMap` (keyed by Property Name as a fallback). Fetches both sheets in parallel, no extra latency.
