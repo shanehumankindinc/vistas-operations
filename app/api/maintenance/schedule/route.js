@@ -52,9 +52,11 @@ export async function POST(req) {
   try {
     const token = await getBzToken(market);
 
+    // Breezeway person IDs are integers — send as number, not string
+    const numericAssigneeId = assigneeId ? Number(assigneeId) : null;
     const patch = {
       scheduled_date: scheduledDate,
-      ...(assigneeId ? { assigned_to: assigneeId } : {}),
+      ...(numericAssigneeId ? { assigned_to: numericAssigneeId } : {}),
     };
 
     const succeeded = [];
