@@ -37,7 +37,6 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/admin/run-bz-sync") ||
-    pathname.startsWith("/api/admin/test-bz-assign") ||
     pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/reports/generate") ||
     pathname.startsWith("/_next/") ||

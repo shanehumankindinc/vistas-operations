@@ -93,6 +93,9 @@ export default function RoutesPanel({ displayed }: { displayed: PropertyRow[] })
             ? "No assigned tasks"
             : `${routes.length} technician${routes.length !== 1 ? "s" : ""} · ${routes.reduce((s, r) => s + r.totalTasks, 0)} tasks`}
         </div>
+        <div style={{ fontSize: 10, color: "#cbd5e1", marginTop: 4 }}>
+          Assignments sync nightly at 5am · new schedules appear immediately
+        </div>
       </div>
 
       {/* Scrollable body */}
