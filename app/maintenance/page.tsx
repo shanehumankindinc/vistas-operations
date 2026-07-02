@@ -262,6 +262,7 @@ export default function MaintenancePage() {
 
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [scheduleRow, setScheduleRow] = useState<PropertyRow | null>(null);
+  const [showMap, setShowMap] = useState(true);
 
   useEffect(() => {
     const match = document.cookie.match(/(?:^|;\s*)ops_ui=([^;]+)/);
@@ -301,7 +302,7 @@ export default function MaintenancePage() {
     return Array.from(new Set(filtered.map(r => r.property))).sort().map(n => ({ key: n, label: n }));
   }, [rows, markets]);
 
-  useEffect(() => { setProperties(new Set()); }, [markets]);
+  useEffect(() => { setProperties(new Set()); setShowMap(true); }, [markets]);
 
   const displayed = useMemo(() => {
     let out = rows;
@@ -389,6 +390,20 @@ export default function MaintenancePage() {
           groups={[{ label: "Accessible", members: ["vacant", "checkin", "checkout", "turn"] }]}
         />
         <div style={{ flex: 1 }} />
+        {markets.size === 1 && (
+          <button
+            onClick={() => setShowMap(v => !v)}
+            style={{
+              fontSize: 12, fontWeight: 500, padding: "5px 10px",
+              border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer",
+              background: showMap ? "#1e293b" : "#ffffff",
+              color: showMap ? "#ffffff" : "#64748b",
+              display: "flex", alignItems: "center", gap: 5,
+            }}
+          >
+            <span>🗺️</span> {showMap ? "Hide Map" : "Show Map"}
+          </button>
+        )}
         <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Date</span>
         <input type="date" value={date} min={isoToday()} max={isoMax()} onChange={e => e.target.value && setDate(e.target.value)}
           style={{ fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 10px", color: "#1a202c", background: "#ffffff", outline: "none", cursor: "pointer" }} />
@@ -423,8 +438,8 @@ export default function MaintenancePage() {
           </div>
         </div>
 
-        {/* Map — visible when exactly one market is selected */}
-        {!loading && !error && markets.size === 1 && (
+        {/* Map — visible when exactly one market is selected and not toggled off */}
+        {!loading && !error && markets.size === 1 && showMap && (
           <PropertyMap
             rows={displayed}
             market={Array.from(markets)[0]}

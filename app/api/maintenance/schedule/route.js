@@ -13,6 +13,28 @@ function getSessionUser(req) {
 const VALID_MARKETS = new Set(["branson", "deep_creek", "poconos"]);
 const BASE = "https://api.breezeway.io/public";
 
+// Space out Breezeway writes to respect API rate limits
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function patchBzTask(token, taskId, patch) {
+  const res = await fetch(`${BASE}/inventory/v1/task/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `JWT ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Task ${taskId}: ${res.status} ${body.slice(0, 200)}`);
+  }
+  return res.json().catch(() => ({}));
+}
+
 export async function POST(req) {
   const session = getSessionUser(req);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,41 +52,32 @@ export async function POST(req) {
   try {
     const token = await getBzToken(market);
 
-    const results = await Promise.allSettled(
-      taskIds.map(async taskId => {
-        const patch = {
-          scheduled_date: scheduledDate,
-          ...(assigneeId ? { assigned_to: assigneeId } : {}),
-        };
+    const patch = {
+      scheduled_date: scheduledDate,
+      ...(assigneeId ? { assigned_to: assigneeId } : {}),
+    };
 
-        const res = await fetch(`${BASE}/inventory/v1/task/${encodeURIComponent(taskId)}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `JWT ${token}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(patch),
-        });
+    const succeeded = [];
+    const errors = [];
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          throw new Error(`Task ${taskId}: ${res.status} ${body}`);
-        }
-        return taskId;
-      })
-    );
-
-    const succeeded = results.filter(r => r.status === "fulfilled").map(r => r.value);
-    const failed = results
-      .filter(r => r.status === "rejected")
-      .map(r => r.reason?.message || "Unknown error");
-
-    if (failed.length > 0 && succeeded.length === 0) {
-      return Response.json({ error: failed[0] || "All tasks failed to update" }, { status: 502 });
+    for (let i = 0; i < taskIds.length; i++) {
+      if (i > 0) {
+        // 700ms between each write — stays well within Breezeway's API rate limits
+        await sleep(700);
+      }
+      try {
+        await patchBzTask(token, taskIds[i], patch);
+        succeeded.push(taskIds[i]);
+      } catch (err) {
+        errors.push(err.message || String(err));
+      }
     }
 
-    return Response.json({ ok: true, succeeded: succeeded.length, failed: failed.length, errors: failed });
+    if (errors.length > 0 && succeeded.length === 0) {
+      return Response.json({ error: errors[0] || "All tasks failed to update" }, { status: 502 });
+    }
+
+    return Response.json({ ok: true, succeeded: succeeded.length, failed: errors.length, errors });
   } catch (err) {
     console.error("schedule route error:", err);
     return Response.json({ error: err.message || "Internal error" }, { status: 500 });
