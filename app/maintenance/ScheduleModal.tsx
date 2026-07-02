@@ -159,7 +159,7 @@ export default function ScheduleModal({
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a202c" }}>Schedule Tasks</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{row.property}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+          <button onClick={() => onClose()} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
         </div>
 
         {/* Body */}
@@ -265,7 +265,7 @@ export default function ScheduleModal({
         <div style={{ padding: "14px 20px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
           {saveError && <div style={{ fontSize: 12, color: "#dc2626", flex: 1 }}>{saveError}</div>}
           {saved && <div style={{ fontSize: 12, color: "#16a34a", flex: 1, fontWeight: 600 }}>Saved!</div>}
-          <button onClick={onClose} style={{ padding: "8px 16px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 7, background: "#ffffff", color: "#374151", cursor: "pointer" }}>
+          <button onClick={() => onClose()} style={{ padding: "8px 16px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 7, background: "#ffffff", color: "#374151", cursor: "pointer" }}>
             Cancel
           </button>
           <button
