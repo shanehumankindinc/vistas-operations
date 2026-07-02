@@ -149,19 +149,22 @@ export default function OnboardingPage() {
             icon="✍️"
             title="OTA Listing Writer"
             description="Generate Airbnb and VRBO listings from Zoho inspection data using AI."
-            status="coming soon"
+            status="active"
+            href="/onboarding/ota-writer"
           />
           <ToolCard
             icon="🔄"
             title="Breezeway Sync"
-            description="Push property tags, notes, and custom fields from Guesty to Breezeway."
-            status="coming soon"
+            description="Match Zoho properties to Breezeway, push notes and fields to cleaners."
+            status="active"
+            href="/onboarding/breezeway-sync"
           />
           <ToolCard
             icon="🏷️"
             title="Tag Detection"
             description="Review and correct suggested Breezeway tags based on property data."
-            status="coming soon"
+            status="active"
+            href="/onboarding/tag-detection"
           />
           <ToolCard
             icon="📋"
