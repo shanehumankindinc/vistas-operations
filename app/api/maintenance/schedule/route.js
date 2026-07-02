@@ -1,4 +1,5 @@
 import { getBzToken } from "../../../../lib/breezeway";
+import { getSupabase } from "../../../../lib/db";
 
 function getSessionUser(req) {
   const cookieHeader = req.headers.get("cookie") || "";
@@ -13,7 +14,6 @@ function getSessionUser(req) {
 const VALID_MARKETS = new Set(["branson", "deep_creek", "poconos"]);
 const BASE = "https://api.breezeway.io/public";
 
-// Space out Breezeway writes to respect API rate limits
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -43,7 +43,7 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { market, taskIds, assigneeId, scheduledDate } = body;
+  const { market, taskIds, assigneeId, assigneeName, scheduledDate } = body;
 
   if (!market || !VALID_MARKETS.has(market)) return Response.json({ error: "Invalid market" }, { status: 400 });
   if (!Array.isArray(taskIds) || taskIds.length === 0) return Response.json({ error: "No tasks provided" }, { status: 400 });
@@ -77,6 +77,18 @@ export async function POST(req) {
 
     if (errors.length > 0 && succeeded.length === 0) {
       return Response.json({ error: errors[0] || "All tasks failed to update" }, { status: 502 });
+    }
+
+    // Write the assignee back to Supabase so Routes reflects it immediately on next page load,
+    // without waiting for the nightly BZ sync cron.
+    if (succeeded.length > 0) {
+      const supabase = getSupabase();
+      const vendorName = assigneeName || "Unassigned";
+      await supabase
+        .from("breezeway_tasks")
+        .update({ vendor_name: vendorName })
+        .in("task_id", succeeded)
+        .eq("market", market);
     }
 
     return Response.json({ ok: true, succeeded: succeeded.length, failed: errors.length, errors });

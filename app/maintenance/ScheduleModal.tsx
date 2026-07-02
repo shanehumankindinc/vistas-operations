@@ -104,6 +104,9 @@ export default function ScheduleModal({
     setSaving(true);
     setSaveError(null);
     try {
+      const assigneeName = assigneeId
+        ? (bzUsers.find(u => String(u.id) === assigneeId)?.name || "Unassigned")
+        : "Unassigned";
       const res = await fetch("/api/maintenance/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,6 +114,7 @@ export default function ScheduleModal({
           market: row.market,
           taskIds: Array.from(selectedTasks),
           assigneeId: assigneeId || null,
+          assigneeName,
           scheduledDate: date,
         }),
       });
@@ -118,9 +122,6 @@ export default function ScheduleModal({
       if (!res.ok || j.error) { setSaveError(j.error || "Failed to schedule."); }
       else {
         setSaved(true);
-        const assigneeName = assigneeId
-          ? (bzUsers.find(u => String(u.id) === assigneeId)?.name || "Unassigned")
-          : "Unassigned";
         setTimeout(() => onClose({ taskIds: Array.from(selectedTasks), assigneeName }), 1200);
       }
     } catch {
