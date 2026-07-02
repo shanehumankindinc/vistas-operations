@@ -248,7 +248,7 @@ export default function MaintenancePage() {
   const [occupancies, setOccupancies] = useState<Set<string>>(new Set());
   const [date, setDate] = useState(isoTomorrow());
 
-  const [sortKey, setSortKey] = useState<SortKey>("open_tasks");
+  const [sortKey, setSortKey] = useState<SortKey>("urgent_count");
   const [sortAsc, setSortAsc] = useState(false);
 
   useEffect(() => {
