@@ -58,6 +58,8 @@ function fmtDate(iso: string) {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
+type SaveResult = { taskIds: string[]; assigneeName: string };
+
 export default function ScheduleModal({
   row,
   date,
@@ -65,7 +67,7 @@ export default function ScheduleModal({
 }: {
   row: PropertyRow;
   date: string;
-  onClose: () => void;
+  onClose: (result?: SaveResult) => void;
 }) {
   const [bzUsers, setBzUsers] = useState<BzUser[]>([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
@@ -114,7 +116,13 @@ export default function ScheduleModal({
       });
       const j = await res.json();
       if (!res.ok || j.error) { setSaveError(j.error || "Failed to schedule."); }
-      else { setSaved(true); setTimeout(onClose, 1200); }
+      else {
+        setSaved(true);
+        const assigneeName = assigneeId
+          ? (bzUsers.find(u => String(u.id) === assigneeId)?.name || "Unassigned")
+          : "Unassigned";
+        setTimeout(() => onClose({ taskIds: Array.from(selectedTasks), assigneeName }), 1200);
+      }
     } catch {
       setSaveError("Network error — please try again.");
     } finally {

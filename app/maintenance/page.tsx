@@ -329,6 +329,26 @@ export default function MaintenancePage() {
     if (sortKey === k) setSortAsc(v => !v); else { setSortKey(k); setSortAsc(false); }
   }
 
+  // After scheduling, optimistically update local rows so Routes panel reflects the assignment
+  // without waiting for the next 5am BZ sync cron.
+  function handleScheduleSaved(result: { taskIds: string[]; assigneeName: string }) {
+    if (!scheduleRow) return;
+    const taskIdSet = new Set(result.taskIds);
+    setRows(prev => prev.map(r => {
+      if (r.market !== scheduleRow.market || r.property !== scheduleRow.property) return r;
+      if (!r.maintenance_tasks) return r;
+      const updated = r.maintenance_tasks.split("\n").map(line => {
+        const parts = line.split(" | ");
+        const taskId = (parts[2] || "").split("/").pop() || "";
+        if (!taskIdSet.has(taskId)) return line;
+        parts[4] = result.assigneeName;
+        return parts.join(" | ");
+      }).join("\n");
+      return { ...r, maintenance_tasks: updated };
+    }));
+    setScheduleRow(null);
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
@@ -644,7 +664,10 @@ export default function MaintenancePage() {
         <ScheduleModal
           row={scheduleRow}
           date={date}
-          onClose={() => setScheduleRow(null)}
+          onClose={(result) => {
+            if (result) handleScheduleSaved(result);
+            else setScheduleRow(null);
+          }}
         />
       )}
     </div>
