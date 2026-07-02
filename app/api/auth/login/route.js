@@ -45,8 +45,8 @@ export async function POST(req) {
     headers: {
       "Content-Type": "application/json",
       "Set-Cookie": [
-        `ops_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
-        `ops_ui=${uiPayload}; Path=/; SameSite=Lax; Max-Age=${maxAge}`,
+        `ops_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`,
+        `ops_ui=${uiPayload}; Path=/; Secure; SameSite=Lax; Max-Age=${maxAge}`,
       ].join(", "),
     },
   });

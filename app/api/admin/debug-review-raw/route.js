@@ -3,13 +3,20 @@ import { fetchAllReviews } from "@/lib/guesty";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Dumps the first raw review object for each market to inspect all available fields.
-// Auth: ?secret=CRON_SECRET
 export async function GET(req) {
-  const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
 
   const { MARKET_KEYS } = await import("@/lib/markets");
   const samples = {};

@@ -2,15 +2,22 @@ import { fetchAllListings } from "@/lib/guesty";
 
 export const dynamic = "force-dynamic";
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Dump the raw Guesty listing object for a single property.
-// Auth: ?secret=CRON_SECRET
 // Params: ?market=branson&listing_id=OPTIONAL_ID
-// If listing_id is omitted, returns the first listing in the market.
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const market = searchParams.get("market") || "branson";
   const listingId = searchParams.get("listing_id");

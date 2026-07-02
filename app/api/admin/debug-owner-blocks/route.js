@@ -3,14 +3,22 @@ import { getGuestyToken } from "@/lib/guesty";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Probe what status values Guesty uses for owner blocks.
-// Tries several candidate statuses across a 60-day forward window.
-// Auth: ?secret=CRON_SECRET&market=branson
+// ?market=branson
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const market = searchParams.get("market") || "branson";
   const token = await getGuestyToken(market);

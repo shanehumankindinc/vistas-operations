@@ -3,17 +3,22 @@ import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Debug: find maintenance/issue tasks created by cleaners in Breezeway.
-// Returns raw task objects so we can identify the correct field names for:
-//   - task type (is it type_department, task_type, type, category?)
-//   - created_by (who created the task)
 // ?market=branson|deep_creek|poconos  (default: branson)
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
-  const secret = searchParams.get("secret");
-  if (secret !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const market = searchParams.get("market") || "branson";
 
   const supabase = getSupabase();

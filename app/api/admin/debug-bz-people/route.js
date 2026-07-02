@@ -3,24 +3,23 @@ import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Test endpoint: resolves every unique finished_by person from recent tasks via the BZ People API.
- * Determines type_role per person and shows company mapping alongside crew membership.
- *
- * Hypothesis: Humankind staff (e.g. Charles Redding) will have a different type_role
- * than cleaning vendor accounts and their crew members.
- *
- * Auth: ?secret=CRON_SECRET
- * Params:
- *   ?market=branson|deep_creek|poconos  (default: branson)
- *   ?days=30                            (lookback window, default: 30)
- */
-export async function GET(req) {
-  const { searchParams } = new URL(req.url);
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
 
-  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// Resolves every unique finished_by person from recent tasks via the BZ People API.
+// ?market=branson|deep_creek|poconos  (default: branson)
+// ?days=30 (lookback window, default: 30)
+export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
+  const { searchParams } = new URL(req.url);
 
   const market = searchParams.get("market") || "branson";
   const days = parseInt(searchParams.get("days") || "30", 10);

@@ -3,13 +3,22 @@ import { getGuestyToken } from "@/lib/guesty";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Dumps one raw reservation object (no field filtering) to inspect all available fields.
-// Auth: ?secret=CRON_SECRET&market=branson (default branson)
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
+// Dumps one raw reservation object to inspect all available fields.
+// ?market=branson (default branson)
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const market = searchParams.get("market") || "branson";
   const today = new Date().toISOString().slice(0, 10);
