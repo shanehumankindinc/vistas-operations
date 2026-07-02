@@ -229,9 +229,17 @@ export default function ReportsPage() {
     <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
       {/* Nav */}
       <div style={{ background: "#1e293b", borderBottom: "1px solid #334155", padding: "0 24px", display: "flex", alignItems: "center", height: 52 }}>
-        <a href="/" style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, textDecoration: "none" }}>
+        <a href="/" style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, textDecoration: "none", marginRight: 28 }}>
           <span style={{ color: "#ffffff" }}>Vistas</span> Ops
         </a>
+        <a href="/" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>
+          Cleaning
+        </a>
+        {(userRole === "admin" || userRole === "employee") && (
+          <a href="/maintenance" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>
+            Maintenance
+          </a>
+        )}
       </div>
       {/* Sub-toolbar */}
       <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", display: "flex", alignItems: "center", height: 44, gap: 12 }}>

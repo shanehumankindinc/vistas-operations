@@ -443,9 +443,17 @@ export default function Dashboard() {
 
   const nav = (
     <nav style={{ background: "#1e293b", borderBottom: "1px solid #334155", padding: "0 24px", display: "flex", alignItems: "center", height: 52, gap: 0 }}>
-      <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap" }}>
+      <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", marginRight: 28 }}>
         <span style={{ color: "#ffffff" }}>Vistas</span> Ops
       </span>
+      <a href="/" style={{ fontSize: 13, fontWeight: 500, color: "#ffffff", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid #ffffff" }}>
+        Cleaning
+      </a>
+      {(currentUser?.role === "admin" || currentUser?.role === "employee") && (
+        <a href="/maintenance" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>
+          Maintenance
+        </a>
+      )}
       <div style={{ flex: 1 }} />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {currentUser?.role === "admin" && (
