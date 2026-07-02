@@ -273,6 +273,8 @@ export default function Dashboard() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [view, setView] = useState<"performance" | "cleans">("performance");
+  const [validatedIds, setValidatedIds] = useState<Set<string>>(new Set());
 
   const loadUsers = useCallback(async () => {
     setSettingsLoading(true);
@@ -431,6 +433,58 @@ export default function Dashboard() {
   const kpiOnTime = useMemo(() => { const s = kpiRows.filter(r => r.on_time_rate != null); return s.length ? s.reduce((a, r) => a + (r.on_time_rate ?? 0), 0) / s.length : null; }, [kpiRows]);
   const kpiCleanliness = useMemo(() => { const s = kpiRows.filter(r => r.cleanliness_score != null); return s.length ? s.reduce((a, r) => a + (r.cleanliness_score ?? 0), 0) / s.length : null; }, [kpiRows]);
 
+  const completedCleans = useMemo(() => {
+    return rows.flatMap(row =>
+      (row.enriched_tasks || [])
+        .filter(t => t.is_finished)
+        .map(t => ({
+          task_id: t.task_id,
+          market: row.market || "",
+          property: t.property_name || "",
+          cleanName: t.task_title || "Clean",
+          cleaner: row.vendor_name,
+          crew: t.individual_name || "",
+          status: t.clean_status || "Completed",
+          time: t.total_time || "",
+          scheduledDate: t.scheduled_date,
+        }))
+    ).sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+  }, [rows]);
+
+  useEffect(() => {
+    if (view !== "cleans") return;
+    fetch(`/api/cleans/validate?market=${encodeURIComponent(market)}`)
+      .then(r => r.json())
+      .then(j => setValidatedIds(new Set(j.task_ids || [])))
+      .catch(() => {});
+  }, [view, market, rangeDays]);
+
+  async function toggleValidated(taskId: string, mkt: string) {
+    const nowValidated = !validatedIds.has(taskId);
+    setValidatedIds(prev => {
+      const next = new Set(prev);
+      if (nowValidated) next.add(taskId); else next.delete(taskId);
+      return next;
+    });
+    try {
+      if (nowValidated) {
+        await fetch("/api/cleans/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: taskId, market: mkt }),
+        });
+      } else {
+        await fetch(`/api/cleans/validate?task_id=${encodeURIComponent(taskId)}`, { method: "DELETE" });
+      }
+    } catch {
+      setValidatedIds(prev => {
+        const next = new Set(prev);
+        if (nowValidated) next.delete(taskId); else next.add(taskId);
+        return next;
+      });
+    }
+  }
+
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(false); }
   }
@@ -537,7 +591,7 @@ export default function Dashboard() {
         </>
       )}
       <div style={{ flex: 1 }} />
-      <a href="/reports" style={{ fontSize: 12, fontWeight: 500, color: "#64748b", textDecoration: "none", marginRight: 8, whiteSpace: "nowrap" }}>Reports</a>
+      <a href="/reports" style={{ fontSize: 12, fontWeight: 500, color: "#64748b", textDecoration: "none", marginRight: 8, whiteSpace: "nowrap" }}>Scorecards</a>
       <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
       {rangeButtons}
     </div>
@@ -903,10 +957,81 @@ export default function Dashboard() {
     <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
       {nav}
       {summaryToolbar}
-      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
+      <div style={{ display: "flex", background: "#f4f6f9" }}>
 
-        {/* Page heading */}
-        <h1 style={{ margin: "0 0 4px 0", fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Cleaner Scorecard</h1>
+        {/* Left sidebar nav */}
+        <div style={{ width: 180, flexShrink: 0, background: "#ffffff", borderRight: "1px solid #e2e8f0", minHeight: "calc(100vh - 96px)", paddingTop: 16 }}>
+          {([
+            { key: "performance" as const, label: "Cleaner Performance" },
+            { key: "cleans" as const, label: "Completed Cleans" },
+          ]).map(item => (
+            <button key={item.key} onClick={() => setView(item.key)} style={{
+              display: "block", width: "100%", textAlign: "left",
+              padding: "10px 16px", border: "none",
+              background: view === item.key ? "#f0f9ff" : "transparent",
+              color: view === item.key ? "#1d4ed8" : "#374151",
+              fontWeight: view === item.key ? 700 : 400,
+              fontSize: 13, cursor: "pointer",
+              borderLeft: `3px solid ${view === item.key ? "#3b82f6" : "transparent"}`,
+            }}>{item.label}</button>
+          ))}
+        </div>
+
+        {/* Main content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {view === "cleans" ? (
+            <div style={{ padding: "24px 28px" }}>
+              <h1 style={{ margin: "0 0 4px 0", fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Completed Cleans</h1>
+              <p style={{ margin: "0 0 18px 0", fontSize: 13, color: "#6b7280" }}>
+                Cleans completed in the selected range. Check Validated when you have verified the clean.
+              </p>
+              <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "auto" }}>
+                {loading ? (
+                  <div style={{ padding: "60px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>Loading…</div>
+                ) : completedCleans.length === 0 ? (
+                  <div style={{ padding: "60px 0", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>No completed cleans for this range.</div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: "#1e2a3a" }}>
+                        {(["Market", "Property", "Clean Name", "Cleaner", "Crew", "Status", "Time", "Link", "Validated"] as const).map(h => (
+                          <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {completedCleans.map((c, i) => (
+                        <tr key={c.task_id} style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafafa" }}>
+                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>{MARKET_LABELS[c.market] || c.market}</td>
+                          <td style={{ padding: "10px 14px", color: "#1a202c", fontWeight: 500 }}>{c.property}</td>
+                          <td style={{ padding: "10px 14px", color: "#374151" }}>{c.cleanName}</td>
+                          <td style={{ padding: "10px 14px", color: "#374151" }}>{c.cleaner}</td>
+                          <td style={{ padding: "10px 14px", color: "#6b7280" }}>{c.crew || "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#374151" }}>{c.status}</td>
+                          <td style={{ padding: "10px 14px", color: "#6b7280", whiteSpace: "nowrap" }}>{c.time || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <a href={`https://app.breezeway.io/task/${c.task_id}`} target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", textDecoration: "none", fontSize: 12 }}>↗</a>
+                          </td>
+                          <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={validatedIds.has(c.task_id)}
+                              onChange={() => toggleValidated(c.task_id, c.market)}
+                              style={{ accentColor: "#3b82f6", width: 16, height: 16, cursor: "pointer" }}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
+
+              {/* Page heading */}
+              <h1 style={{ margin: "0 0 4px 0", fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Cleaner Performance</h1>
         <p style={{ margin: "0 0 18px 0", fontSize: 13, color: "#6b7280" }}>
           Every cleaner scored by on-time rate, cleanliness rating, and refund exposure.
           {meta && !loading && (
@@ -1035,6 +1160,9 @@ export default function Dashboard() {
             {visibleRows.length} cleaners &nbsp;·&nbsp; Click a row to drill down
           </div>
         )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ─── Settings Drawer ─────────────────────────────────────────────────── */}
