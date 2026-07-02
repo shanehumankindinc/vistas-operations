@@ -3,7 +3,7 @@ import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "vistas-ops-dev-secret-2026";
+const AUTH_SECRET = process.env.AUTH_SECRET || "";
 
 function sha256(s) {
   return createHash("sha256").update(s).digest("hex");
@@ -16,6 +16,7 @@ function signToken(payload) {
 }
 
 export async function POST(req) {
+  if (!AUTH_SECRET) return Response.json({ error: "Server misconfiguration: AUTH_SECRET not set" }, { status: 500 });
   const { email, password } = await req.json();
   if (!email || !password) {
     return Response.json({ error: "Email and password are required" }, { status: 400 });

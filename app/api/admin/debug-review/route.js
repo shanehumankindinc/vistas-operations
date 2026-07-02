@@ -2,10 +2,22 @@ import { getGuestyToken } from "@/lib/guesty";
 
 export const dynamic = "force-dynamic";
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Debug: shows raw Guesty /reviews response and what the cron would extract.
 // ?market=branson|deep_creek|poconos  (default: branson)
 // ?skip=0  — page offset for pagination
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const market = searchParams.get("market") || "branson";
   const skip = parseInt(searchParams.get("skip") || "0", 10);

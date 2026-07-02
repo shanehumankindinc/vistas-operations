@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "vistas-ops-dev-secret-2026";
+const AUTH_SECRET = process.env.AUTH_SECRET || "";
 
 async function verifyToken(token: string): Promise<boolean> {
+  if (!AUTH_SECRET) return false;
   const parts = token.split(".");
   if (parts.length !== 2) return false;
   const [data, sig] = parts;

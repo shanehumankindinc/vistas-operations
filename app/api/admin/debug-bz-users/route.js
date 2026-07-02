@@ -3,10 +3,22 @@ import { getSupabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+function getSessionUser(req) {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/ops_session=([^;]+)/);
+  if (!match) return null;
+  try {
+    const [data] = match[1].split(".");
+    return JSON.parse(Buffer.from(data, "base64url").toString());
+  } catch { return null; }
+}
+
 // Debug: find cleaning tasks (not checklists) and inspect assignments vs finished_by
 // to test the hypothesis: assignments[0] = company, finished_by = individual.
 // ?market=branson|deep_creek|poconos  (default: poconos)
 export async function GET(req) {
+  const session = getSessionUser(req);
+  if (!session || session.role !== "admin") return Response.json({ error: "Admin only" }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const market = searchParams.get("market") || "poconos";
 
