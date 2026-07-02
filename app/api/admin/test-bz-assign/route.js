@@ -50,26 +50,30 @@ export async function GET(req) {
     const patchText = await patchRes.text();
     log.push({ step: "PATCH response", status: patchRes.status, body: patchText.slice(0, 1000) });
 
-    // 4. Try POST to assignment sub-resource (Breezeway likely uses a separate endpoint)
-    const assignBody = { user_id: rich.id };
-    const assignRes = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}/assignment`, {
+    // 4. Try PATCH with assignments array (matches the field name on the task object)
+    for (const tryBody of [
+      { assignments: [{ user_id: rich.id }] },
+      { assignments: [rich.id] },
+      { assignees: [{ user_id: rich.id }] },
+      { user_ids: [rich.id] },
+    ]) {
+      const r = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(tryBody),
+      });
+      const t = await r.text();
+      log.push({ step: `PATCH ${JSON.stringify(tryBody)}`, status: r.status, body: t.slice(0, 300) });
+    }
+
+    // 5. Also try POST to people endpoint with task reference
+    const peopleAssignRes = await fetch(`${BASE}/inventory/v1/people/${rich.id}/task`, {
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(assignBody),
+      body: JSON.stringify({ task_id: Number(TASK_ID) }),
     });
-    const assignText = await assignRes.text();
-    log.push({ step: "POST /assignment", status: assignRes.status, body: assignText.slice(0, 500) });
-
-    // 5. Try plural endpoint if singular 404s
-    if (assignRes.status === 404 || assignRes.status === 405) {
-      const assign2Res = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}/assignments`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(assignBody),
-      });
-      const assign2Text = await assign2Res.text();
-      log.push({ step: "POST /assignments", status: assign2Res.status, body: assign2Text.slice(0, 500) });
-    }
+    const peopleAssignText = await peopleAssignRes.text();
+    log.push({ step: "POST /people/{id}/task", status: peopleAssignRes.status, body: peopleAssignText.slice(0, 300) });
 
     // 6. Re-fetch task to see what changed
     const getRes2 = await fetch(`${BASE}/inventory/v1/task/${TASK_ID}`, { headers });
