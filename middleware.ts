@@ -39,6 +39,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/admin/run-bz-sync") ||
     pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/onboarding/zoho-intake") ||
     pathname.startsWith("/api/reports/generate") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon")
