@@ -103,10 +103,11 @@ function occupancyDateLabel(type: string, checkIn: string | null, checkOut: stri
     case "checkin":
     case "turn":
       return checkIn ? `Check-in ${fmtShortDate(checkIn)}` : null;
+    case "vacant":
     case "checkout":
-      return checkOut ? `Check-out ${fmtShortDate(checkOut)}` : null;
+      // check_in_date is pre-populated by SQL with next upcoming check-in date
+      return checkIn ? `Check-in ${fmtShortDate(checkIn)}` : "Check-in > 14 days";
     case "guest_occupied":
-      return checkOut ? `Out ${fmtShortDate(checkOut)}` : null;
     case "owner_occupied":
       return checkOut ? `Out ${fmtShortDate(checkOut)}` : null;
     default:
