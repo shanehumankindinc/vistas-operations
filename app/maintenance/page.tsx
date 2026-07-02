@@ -135,11 +135,12 @@ function checkinPillStyle(days: number): { bg: string; text: string; border: str
 type SortKey = "property" | "market" | "open_tasks" | "urgent_count" | "avg_review";
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
-function MultiSelect({ options, selected, onChange, placeholder }: {
+function MultiSelect({ options, selected, onChange, placeholder, groups }: {
   options: { key: string; label: string }[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
   placeholder: string;
+  groups?: { label: string; members: string[] }[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -165,6 +166,14 @@ function MultiSelect({ options, selected, onChange, placeholder }: {
     onChange(next);
   }
 
+  function toggleGroup(members: string[]) {
+    const allIn = members.every(m => selected.has(m));
+    const next = new Set(selected);
+    if (allIn) { members.forEach(m => next.delete(m)); }
+    else { members.forEach(m => next.add(m)); }
+    onChange(next);
+  }
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(v => !v)} style={{
@@ -186,10 +195,25 @@ function MultiSelect({ options, selected, onChange, placeholder }: {
             width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
             fontWeight: allSelected ? 600 : 400, color: allSelected ? "#1a202c" : "#6b7280",
             background: allSelected ? "#f8fafc" : "transparent", border: "none",
-            borderBottom: "1px solid #f3f4f6", cursor: "pointer",
+            borderBottom: "1px solid #e2e8f0", cursor: "pointer",
           }}>
             {placeholder} {allSelected && "✓"}
           </button>
+          {groups && groups.map(g => {
+            const allIn = g.members.every(m => selected.has(m));
+            return (
+              <button key={g.label} onClick={() => toggleGroup(g.members)} style={{
+                width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
+                fontWeight: allIn ? 600 : 500, color: allIn ? "#1d4ed8" : "#374151",
+                background: allIn ? "#eff6ff" : "#f8fafc", border: "none",
+                borderBottom: "1px solid #e2e8f0", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                {g.label}
+                {allIn && <span style={{ color: "#3b82f6", fontSize: 11 }}>✓</span>}
+              </button>
+            );
+          })}
           {options.map(o => (
             <button key={o.key} onClick={() => toggle(o.key)} style={{
               width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
@@ -222,7 +246,6 @@ export default function MaintenancePage() {
   const [markets, setMarkets] = useState<Set<string>>(new Set());
   const [properties, setProperties] = useState<Set<string>>(new Set());
   const [occupancies, setOccupancies] = useState<Set<string>>(new Set());
-  const [accessibleOnly, setAccessibleOnly] = useState(false);
   const [date, setDate] = useState(isoTomorrow());
 
   const [sortKey, setSortKey] = useState<SortKey>("open_tasks");
@@ -273,7 +296,6 @@ export default function MaintenancePage() {
     if (markets.size > 0) out = out.filter(r => markets.has(r.market));
     if (properties.size > 0) out = out.filter(r => properties.has(r.property));
     if (occupancies.size > 0) out = out.filter(r => occupancies.has(r.tomorrow));
-    if (accessibleOnly) out = out.filter(r => ACCESSIBLE_TYPES.has(r.tomorrow));
     return [...out].sort((a, b) => {
       let av: string | number = 0, bv: string | number = 0;
       if (sortKey === "property")     { av = a.property; bv = b.property; }
@@ -285,7 +307,7 @@ export default function MaintenancePage() {
       if (av > bv) return sortAsc ? 1 : -1;
       return a.property.localeCompare(b.property);
     });
-  }, [rows, markets, properties, occupancies, accessibleOnly, sortKey, sortAsc]);
+  }, [rows, markets, properties, occupancies, sortKey, sortAsc]);
 
   function handleSort(k: SortKey) {
     if (sortKey === k) setSortAsc(v => !v); else { setSortKey(k); setSortAsc(false); }
@@ -347,15 +369,13 @@ export default function MaintenancePage() {
       <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", display: "flex", alignItems: "center", height: 44, gap: 8 }}>
         <MultiSelect options={MARKET_OPTIONS} selected={markets} onChange={setMarkets} placeholder="All Markets" />
         <MultiSelect options={propertyOptions} selected={properties} onChange={setProperties} placeholder="All Properties" />
-        <MultiSelect options={OCCUPANCY_OPTIONS} selected={occupancies} onChange={setOccupancies} placeholder="All Occupancy" />
-        <button onClick={() => setAccessibleOnly(v => !v)} style={{
-          fontSize: 13, fontWeight: 500, padding: "5px 12px", borderRadius: 6, cursor: "pointer",
-          border: `1px solid ${accessibleOnly ? "#3b82f6" : "#e2e8f0"}`,
-          background: accessibleOnly ? "#eff6ff" : "transparent",
-          color: accessibleOnly ? "#1d4ed8" : "#6b7280",
-        }}>
-          Accessible
-        </button>
+        <MultiSelect
+          options={OCCUPANCY_OPTIONS}
+          selected={occupancies}
+          onChange={setOccupancies}
+          placeholder="All Occupancy"
+          groups={[{ label: "Accessible", members: ["vacant", "checkin", "checkout", "turn"] }]}
+        />
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Date</span>
         <input type="date" value={date} min={isoToday()} max={isoMax()} onChange={e => e.target.value && setDate(e.target.value)}
