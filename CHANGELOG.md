@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-07-02: Onboarding tab — all 4 tool cards activated
+
+### Onboarding infrastructure
+- New `zoho_submissions` Supabase table (market_id, property_name, address, data JSONB, sheet_row, submitted_at, synced_at)
+- New `GET /api/onboarding/submissions` — paginated list with search and single-record `?id=` lookup
+- New `GET /api/onboarding/submissions/count` — count per market for the dashboard indicator
+- `POST /api/onboarding/zoho-intake` (pre-existing) — now correctly bypassed in middleware so Apps Script can POST without a session cookie. Maps sheet names → market IDs, upserts on `(market_id, sheet_row)`.
+- `scripts/zoho-sync.gs` — Apps Script for Google Sheet → Supabase real-time sync (installable `onChange` trigger + `syncAll` backfill). Manual step required: paste into sheet's Apps Script editor, set `INTAKE_SECRET`, run `installTrigger()` then `syncAll()`.
+
+### Property Data card (`/onboarding/submissions`)
+Paginated list of all Zoho-synced properties with search. Click any row to expand all inspection data fields in a two-column grid. Green dot on dashboard when submissions are present.
+
+### OTA Listing Writer card (`/onboarding/ota-writer`)
+Split-panel: property picker on left, inspection data + generate button on right. Calls `POST /api/onboarding/ota-writer` which reads the Zoho submission from Supabase and sends to Claude Haiku. Returns Airbnb title/description and VRBO title/description with character-count indicators and one-click copy. Requires `ANTHROPIC_API_KEY` env var in Vercel.
+
+### Breezeway Sync card (`/onboarding/breezeway-sync`)
+Loads all Breezeway properties for the market via `fetchAllBzPropertiesForMarket`. Fuzzy-matches them to Zoho submissions by normalised name. Filter by matched/unmatched. Select a property to see its match status, current BZ tags, and a notes editor — saves via `PATCH /inventory/v1/property/{id}`. Market ID mapping: ozark → branson BZ account, deepcreek → deep_creek, poconos → poconos.
+
+### Tag Detection card (`/onboarding/tag-detection`)
+Select a Zoho submission → "Detect Tags" calls Claude Haiku with the inspection data → returns suggested Breezeway tags with reasoning. User toggles which tags to keep, then applies them via `PATCH /inventory/v1/property/{id}` on the matched BZ property. Requires `ANTHROPIC_API_KEY`.
+
+### branson-tools security hardening (same session)
+- New `middleware.ts` — protects all `/api/*` routes with HMAC-SHA256 signed session cookie (`bt_session`). Fail-open when `ADMIN_SECRET` is unset. Bypasses: `/api/auth/*`, `/api/cron/*`.
+- Login route now sets `bt_session` HttpOnly cookie (7-day expiry). New logout route clears it.
+- `ADMIN_SECRET` set in Vercel before middleware deploy to avoid lockout.
+- Verified: `POST /api/anthropic` returns 401 without cookie, login sets cookie and all routes work.
+
+---
+
 ## 2026-07-01: Maintenance page — Routes panel, Schedule modal, map improvements
 
 ### Routes panel
