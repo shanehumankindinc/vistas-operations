@@ -115,6 +115,23 @@ function occupancyDateLabel(type: string, checkIn: string | null, checkOut: stri
   }
 }
 
+const ACCESSIBLE_TYPES = new Set(["vacant", "checkin", "checkout", "turn"]);
+
+function daysUntilCheckin(checkInIso: string | null): number | null {
+  if (!checkInIso) return null;
+  const target = new Date(checkInIso + "T12:00:00Z");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function checkinPillStyle(days: number): { bg: string; text: string; border: string } {
+  if (days <= 1)  return { bg: "#fef2f2", text: "#dc2626", border: "#fecaca" };
+  if (days <= 3)  return { bg: "#fff7ed", text: "#c2410c", border: "#fed7aa" };
+  if (days <= 7)  return { bg: "#fefce8", text: "#92400e", border: "#fde68a" };
+  return           { bg: "#f0f9ff", text: "#0369a1", border: "#bae6fd" };
+}
+
 type SortKey = "property" | "market" | "open_tasks" | "urgent_count" | "avg_review";
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
@@ -205,6 +222,7 @@ export default function MaintenancePage() {
   const [markets, setMarkets] = useState<Set<string>>(new Set());
   const [properties, setProperties] = useState<Set<string>>(new Set());
   const [occupancies, setOccupancies] = useState<Set<string>>(new Set());
+  const [accessibleOnly, setAccessibleOnly] = useState(false);
   const [date, setDate] = useState(isoTomorrow());
 
   const [sortKey, setSortKey] = useState<SortKey>("open_tasks");
@@ -255,6 +273,7 @@ export default function MaintenancePage() {
     if (markets.size > 0) out = out.filter(r => markets.has(r.market));
     if (properties.size > 0) out = out.filter(r => properties.has(r.property));
     if (occupancies.size > 0) out = out.filter(r => occupancies.has(r.tomorrow));
+    if (accessibleOnly) out = out.filter(r => ACCESSIBLE_TYPES.has(r.tomorrow));
     return [...out].sort((a, b) => {
       let av: string | number = 0, bv: string | number = 0;
       if (sortKey === "property")     { av = a.property; bv = b.property; }
@@ -266,7 +285,7 @@ export default function MaintenancePage() {
       if (av > bv) return sortAsc ? 1 : -1;
       return a.property.localeCompare(b.property);
     });
-  }, [rows, markets, properties, occupancies, sortKey, sortAsc]);
+  }, [rows, markets, properties, occupancies, accessibleOnly, sortKey, sortAsc]);
 
   function handleSort(k: SortKey) {
     if (sortKey === k) setSortAsc(v => !v); else { setSortKey(k); setSortAsc(false); }
@@ -329,6 +348,14 @@ export default function MaintenancePage() {
         <MultiSelect options={MARKET_OPTIONS} selected={markets} onChange={setMarkets} placeholder="All Markets" />
         <MultiSelect options={propertyOptions} selected={properties} onChange={setProperties} placeholder="All Properties" />
         <MultiSelect options={OCCUPANCY_OPTIONS} selected={occupancies} onChange={setOccupancies} placeholder="All Occupancy" />
+        <button onClick={() => setAccessibleOnly(v => !v)} style={{
+          fontSize: 13, fontWeight: 500, padding: "5px 12px", borderRadius: 6, cursor: "pointer",
+          border: `1px solid ${accessibleOnly ? "#3b82f6" : "#e2e8f0"}`,
+          background: accessibleOnly ? "#eff6ff" : "transparent",
+          color: accessibleOnly ? "#1d4ed8" : "#6b7280",
+        }}>
+          Accessible
+        </button>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Date</span>
         <input type="date" value={date} min={isoToday()} max={isoMax()} onChange={e => e.target.value && setDate(e.target.value)}
@@ -395,6 +422,9 @@ export default function MaintenancePage() {
                     const occ = DAY_TYPE_COLORS[row.tomorrow] || { bg: "#f1f5f9", text: "#64748b" };
                     const isDeepCreek = row.market === "deep_creek";
                     const occDateLabel = occupancyDateLabel(row.tomorrow, row.check_in_date, row.check_out_date);
+                    const isOwner = row.tomorrow === "owner_occupied";
+                    const checkinDays = daysUntilCheckin(row.check_in_date);
+                    const showCheckinPill = checkinDays !== null && row.open_tasks > 0;
 
                     return (
                       <tr key={key}
@@ -410,9 +440,14 @@ export default function MaintenancePage() {
 
                         {/* Occupancy */}
                         <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                          <span style={{ display: "inline-block", background: occ.bg, color: occ.text, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 10 }}>
-                            {DAY_TYPE_LABELS[row.tomorrow] || row.tomorrow}
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ display: "inline-block", background: occ.bg, color: occ.text, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 10 }}>
+                              {DAY_TYPE_LABELS[row.tomorrow] || row.tomorrow}
+                            </span>
+                            {isOwner && (
+                              <span title="Owner stay" style={{ fontSize: 13 }}>🏠</span>
+                            )}
+                          </div>
                           {occDateLabel && (
                             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{occDateLabel}</div>
                           )}
@@ -450,6 +485,17 @@ export default function MaintenancePage() {
 
                         {/* Open Tasks (with warning icon + red age) */}
                         <td style={{ padding: "10px 14px", width: 260, maxWidth: 260 }}>
+                          {showCheckinPill && (() => {
+                            const ps = checkinPillStyle(checkinDays!);
+                            const label = checkinDays === 0 ? "Check-in today"
+                              : checkinDays === 1 ? "Check-in tomorrow"
+                              : `Check-in in ${checkinDays} days`;
+                            return (
+                              <div style={{ display: "inline-block", background: ps.bg, color: ps.text, border: `1px solid ${ps.border}`, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, marginBottom: 6 }}>
+                                {label}
+                              </div>
+                            );
+                          })()}
                           {openTasks.length === 0
                             ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                             : openTasks.map((t, ti) => (
