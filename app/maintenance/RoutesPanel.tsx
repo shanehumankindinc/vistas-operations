@@ -59,18 +59,14 @@ function parseRouteTasks(raw: string | null): { task: RouteTask; assignee: strin
 }
 
 export default function RoutesPanel({ displayed }: { displayed: PropertyRow[] }) {
-  const { routes, unassignedCount } = useMemo(() => {
+  const routes = useMemo(() => {
     // employee name → Map<"market:property", RouteProperty>
     const employeeMap = new Map<string, Map<string, RouteProperty>>();
-    let unassigned = 0;
 
     for (const row of displayed) {
       const parsed = parseRouteTasks(row.maintenance_tasks);
       for (const { task, assignee } of parsed) {
-        if (!assignee || assignee === "Unassigned") {
-          unassigned++;
-          continue;
-        }
+        if (!assignee || assignee === "Unassigned") continue;
         if (!employeeMap.has(assignee)) employeeMap.set(assignee, new Map());
         const propMap = employeeMap.get(assignee)!;
         const key = `${row.market}:${row.property}`;
@@ -79,14 +75,12 @@ export default function RoutesPanel({ displayed }: { displayed: PropertyRow[] })
       }
     }
 
-    const routes: RouteEmployee[] = Array.from(employeeMap.entries())
+    return Array.from(employeeMap.entries())
       .map(([name, propMap]) => {
         const properties = Array.from(propMap.values());
         return { name, properties, totalTasks: properties.reduce((s, p) => s + p.tasks.length, 0) };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-
-    return { routes, unassignedCount: unassigned };
   }, [displayed]);
 
   return (
@@ -187,11 +181,6 @@ export default function RoutesPanel({ displayed }: { displayed: PropertyRow[] })
           </div>
         ))}
 
-        {unassignedCount > 0 && (
-          <div style={{ padding: "10px 16px", color: "#94a3b8", fontSize: 11, borderTop: "1px solid #f1f5f9" }}>
-            + {unassignedCount} unassigned task{unassignedCount !== 1 ? "s" : ""} not shown
-          </div>
-        )}
       </div>
     </div>
   );
