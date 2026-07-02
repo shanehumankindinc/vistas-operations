@@ -68,7 +68,7 @@ export default function ScheduleModal({
   onClose: () => void;
 }) {
   const [bzUsers, setBzUsers] = useState<BzUser[]>([]);
-  const [usersError, setUsersError] = useState(false);
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [assigneeId, setAssigneeId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -84,9 +84,9 @@ export default function ScheduleModal({
       .then(r => r.json())
       .then(j => {
         if (j.users && Array.isArray(j.users)) setBzUsers(j.users);
-        else setUsersError(true);
       })
-      .catch(() => setUsersError(true));
+      .catch(() => {})
+      .finally(() => setUsersLoaded(true));
   }, [row.market]);
 
   function toggleTask(taskId: string) {
@@ -219,7 +219,9 @@ export default function ScheduleModal({
           {/* Assignee */}
           <div style={{ marginBottom: 4 }}>
             <label style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 5 }}>Assign To</label>
-            {bzUsers.length > 0 ? (
+            {!usersLoaded ? (
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>Loading staff…</div>
+            ) : bzUsers.length > 0 ? (
               <select
                 value={assigneeId}
                 onChange={e => setAssigneeId(e.target.value)}
@@ -234,10 +236,10 @@ export default function ScheduleModal({
                   <option key={u.id} value={String(u.id)}>{u.name}</option>
                 ))}
               </select>
-            ) : usersError ? (
+            ) : (
               <input
                 type="text"
-                placeholder="Enter assignee name"
+                placeholder="Enter assignee name (optional)"
                 value={assigneeId}
                 onChange={e => setAssigneeId(e.target.value)}
                 style={{
@@ -246,8 +248,6 @@ export default function ScheduleModal({
                   background: "#ffffff", color: "#1a202c", outline: "none", boxSizing: "border-box",
                 }}
               />
-            ) : (
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Loading staff…</div>
             )}
           </div>
         </div>
