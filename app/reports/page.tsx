@@ -228,14 +228,16 @@ export default function ReportsPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
       {/* Nav */}
-      <div style={{ background: "#0f172a", padding: "0 24px", display: "flex", alignItems: "center", height: 52, gap: 20 }}>
+      <div style={{ background: "#1e293b", borderBottom: "1px solid #334155", padding: "0 24px", display: "flex", alignItems: "center", height: 52 }}>
         <a href="/" style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, textDecoration: "none" }}>
           <span style={{ color: "#ffffff" }}>Vistas</span> Ops
         </a>
-        <span style={{ width: 1, height: 20, background: "#1e293b" }} />
-        <span style={{ color: "#ffffff", fontSize: 13, fontWeight: 600 }}>Reports</span>
-        <div style={{ flex: 1 }} />
-        <a href="/" style={{ fontSize: 12, color: "#64748b", textDecoration: "none" }}>← Back to Scorecard</a>
+      </div>
+      {/* Sub-toolbar */}
+      <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", display: "flex", alignItems: "center", height: 44, gap: 12 }}>
+        <a href="/" style={{ fontSize: 12, fontWeight: 500, color: "#374151", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>← Back to Scorecard</a>
+        <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#1a202c" }}>Reports</span>
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 16px" }}>

@@ -141,19 +141,23 @@ function scoreColor(s: number | null) {
 
 // ─── NavSelect ────────────────────────────────────────────────────────────────
 
-function NavSelect({ value, onChange, options }: {
-  value: string; onChange: (v: string) => void; options: { key: string; label: string }[];
+function NavSelect({ value, onChange, options, light = false }: {
+  value: string; onChange: (v: string) => void; options: { key: string; label: string }[]; light?: boolean;
 }) {
   return (
     <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
       <select value={value} onChange={e => onChange(e.target.value)} style={{
-        background: "transparent", border: "none", color: "#ffffff", fontSize: 14,
-        fontWeight: 500, cursor: "pointer", paddingRight: 20,
+        background: light ? "#ffffff" : "transparent",
+        border: light ? "1px solid #e2e8f0" : "none",
+        color: light ? "#1a202c" : "#ffffff",
+        fontSize: 13, fontWeight: 500, cursor: "pointer",
+        padding: light ? "5px 28px 5px 10px" : "0 20px 0 0",
+        borderRadius: light ? 6 : 0,
         appearance: "none", WebkitAppearance: "none", outline: "none", maxWidth: 200,
       }}>
         {options.map(o => <option key={o.key} value={o.key} style={{ background: "#0f172a", color: "#ffffff" }}>{o.label}</option>)}
       </select>
-      <span style={{ color: "#64748b", fontSize: 10, pointerEvents: "none", marginLeft: -16 }}>▾</span>
+      <span style={{ color: "#64748b", fontSize: 10, pointerEvents: "none", position: light ? "absolute" : "static", right: light ? 8 : undefined, marginLeft: light ? 0 : -16 }}>▾</span>
     </div>
   );
 }
@@ -435,72 +439,14 @@ export default function Dashboard() {
     ? new Date(meta.lastSynced).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
 
-  // ─── Nav ──────────────────────────────────────────────────────────────────────
+  // ─── Nav (logo + account only) ───────────────────────────────────────────────
 
   const nav = (
     <nav style={{ background: "#1e293b", borderBottom: "1px solid #334155", padding: "0 24px", display: "flex", alignItems: "center", height: 52, gap: 0 }}>
-      {drillCleaner ? (
-        <button onClick={() => { setDrillCleaner(null); setFilterCleaner("all"); setFilterCrew("all"); }} style={{
-          padding: "4px 12px", border: "1px solid #334155", borderRadius: 6, background: "transparent",
-          color: "#94a3b8", fontSize: 12, cursor: "pointer", marginRight: 20, display: "flex", alignItems: "center", gap: 6,
-        }}>
-          ← Back to Cleaners
-        </button>
-      ) : (
-        <>
-          <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, marginRight: 28, whiteSpace: "nowrap" }}>
-            <span style={{ color: "#ffffff" }}>Vistas</span> Ops
-          </span>
-          <span style={{ width: 1, height: 20, background: "#1e293b", marginRight: 20, flexShrink: 0 }} />
-          {currentUser?.role === "vendor" ? (
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>
-              {MARKET_LABELS[(currentUser.markets || [])[0]] || ""}
-            </span>
-          ) : (
-            <>
-              <NavSelect value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
-              <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
-              <NavSelect value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
-            </>
-          )}
-        </>
-      )}
-      {drillCleaner && (
-        <>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#ffffff" }}>{drillCleaner.vendor_name}</span>
-          {crewOptions.length > 2 && (
-            <>
-              <span style={{ width: 1, height: 20, background: "#1e293b", margin: "0 20px", flexShrink: 0 }} />
-              <NavSelect value={filterCrew} onChange={setFilterCrew} options={crewOptions} />
-            </>
-          )}
-        </>
-      )}
+      <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap" }}>
+        <span style={{ color: "#ffffff" }}>Vistas</span> Ops
+      </span>
       <div style={{ flex: 1 }} />
-      <a href="/reports" style={{ fontSize: 12, fontWeight: 500, color: "#64748b", textDecoration: "none", marginRight: 12, whiteSpace: "nowrap" }}>
-        Reports
-      </a>
-      {drillCleaner && (
-        <button onClick={() => exportCSV(drillCleaner, meta)} style={{
-          padding: "5px 14px", border: "1px solid #334155", borderRadius: 6, background: "transparent",
-          color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer", marginRight: 8,
-        }}>
-          ↓ Export CSV
-        </button>
-      )}
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        {RANGES.map(r => (
-          <button key={r.days} onClick={() => setRangeDays(r.days)} style={{
-            padding: "4px 12px", border: "1px solid",
-            borderColor: rangeDays === r.days ? "#ffffff" : "#334155",
-            background: rangeDays === r.days ? "#ffffff" : "transparent",
-            color: rangeDays === r.days ? "#0f172a" : "#64748b",
-            borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer",
-          }}>{r.label}</button>
-        ))}
-        <button onClick={load} style={{ padding: "4px 10px", border: "1px solid #334155", borderRadius: 6, background: "transparent", color: "#64748b", fontSize: 13, cursor: "pointer", marginLeft: 4 }}>↻</button>
-      </div>
-      <span style={{ width: 1, height: 20, background: "#334155", margin: "0 12px", flexShrink: 0 }} />
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         {currentUser?.role === "admin" && (
           <button onClick={() => setShowSettings(true)} style={{ padding: 6, border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0 }} title="Settings">
@@ -549,6 +495,44 @@ export default function Dashboard() {
         </div>
       </div>
     </nav>
+  );
+
+  // ─── Range buttons (shared) ───────────────────────────────────────────────────
+
+  const rangeButtons = (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      {RANGES.map(r => (
+        <button key={r.days} onClick={() => setRangeDays(r.days)} style={{
+          padding: "4px 12px", border: "1px solid",
+          borderColor: rangeDays === r.days ? "#1e293b" : "#e2e8f0",
+          background: rangeDays === r.days ? "#1e293b" : "transparent",
+          color: rangeDays === r.days ? "#ffffff" : "#64748b",
+          borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer",
+        }}>{r.label}</button>
+      ))}
+      <button onClick={load} style={{ padding: "4px 10px", border: "1px solid #e2e8f0", borderRadius: 6, background: "transparent", color: "#64748b", fontSize: 13, cursor: "pointer", marginLeft: 2 }}>↻</button>
+    </div>
+  );
+
+  // ─── Summary toolbar ──────────────────────────────────────────────────────────
+
+  const summaryToolbar = (
+    <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", display: "flex", alignItems: "center", height: 44, gap: 12 }}>
+      {currentUser?.role === "vendor" ? (
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>
+          {MARKET_LABELS[(currentUser.markets || [])[0]] || ""}
+        </span>
+      ) : (
+        <>
+          <NavSelect light value={market} onChange={v => { setMarket(v); setFilterCleaner("all"); setDrillCleaner(null); }} options={MARKET_OPTIONS} />
+          <NavSelect light value={filterCleaner} onChange={handleCleanerSelect} options={cleanerOptions} />
+        </>
+      )}
+      <div style={{ flex: 1 }} />
+      <a href="/reports" style={{ fontSize: 12, fontWeight: 500, color: "#64748b", textDecoration: "none", marginRight: 8, whiteSpace: "nowrap" }}>Reports</a>
+      <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
+      {rangeButtons}
+    </div>
   );
 
   // ─── Issues Panel ─────────────────────────────────────────────────────────────
@@ -711,9 +695,39 @@ export default function Dashboard() {
       ? kpiReviewsWithScore.reduce((s, r) => s + (r?.cleanliness ?? 0), 0) / kpiReviewsWithScore.length
       : null;
 
+    // ─── Drill-down toolbar ───────────────────────────────────────────────────────
+    const drillToolbar = (
+      <div style={{ background: "#ffffff", borderBottom: "1px solid #e2e8f0", padding: "0 24px", display: "flex", alignItems: "center", height: 44, gap: 12 }}>
+        <button onClick={() => { setDrillCleaner(null); setFilterCleaner("all"); setFilterCrew("all"); }} style={{
+          padding: "4px 12px", border: "1px solid #e2e8f0", borderRadius: 6, background: "transparent",
+          color: "#374151", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+        }}>
+          ← Back
+        </button>
+        <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
+        <span style={{ fontWeight: 700, fontSize: 14, color: "#1a202c" }}>{c.vendor_name}</span>
+        {crewOptions.length > 2 && (
+          <>
+            <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
+            <NavSelect light value={filterCrew} onChange={setFilterCrew} options={crewOptions} />
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        <button onClick={() => exportCSV(drillCleaner, meta)} style={{
+          padding: "4px 12px", border: "1px solid #e2e8f0", borderRadius: 6, background: "transparent",
+          color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer",
+        }}>
+          ↓ Export CSV
+        </button>
+        <span style={{ width: 1, height: 20, background: "#e2e8f0", flexShrink: 0 }} />
+        {rangeButtons}
+      </div>
+    );
+
     return (
       <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
         {nav}
+        {drillToolbar}
         <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
 
           {/* Header */}
@@ -880,6 +894,7 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: "#1a202c" }}>
       {nav}
+      {summaryToolbar}
       <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
 
         {/* Page heading */}
