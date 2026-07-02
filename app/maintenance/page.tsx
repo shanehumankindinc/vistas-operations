@@ -11,19 +11,43 @@ type PropertyRow = {
   urgent_count: number;
   urgent_titles: string | null;
   avg_review: number | null;
-  billable_30d: number | null;
-  last_visit: string | null;
+  timesheet_30d: string | null;
   maintenance_tasks: string | null;
+  completed_tasks: string | null;
 };
 
-type Task = { title: string; daysOld: string; url: string };
+// Open task format: "title | Xd old | url | priority"
+type OpenTask = { title: string; daysOld: string; daysNum: number; url: string; urgent: boolean };
+// Completed task format: "title | url"
+type DoneTask = { title: string; url: string };
 
-function parseTasks(raw: string | null): Task[] {
+function parseOpenTasks(raw: string | null): OpenTask[] {
   if (!raw) return [];
   return raw.split("\n").map(line => {
     const parts = line.split(" | ");
-    return { title: parts[0] || "", daysOld: parts[1] || "", url: parts[2] || "" };
+    const daysOld = parts[1] || "";
+    const daysNum = parseInt(daysOld) || 0;
+    return {
+      title: parts[0] || "",
+      daysOld,
+      daysNum,
+      url: parts[2] || "",
+      urgent: (parts[3] || "") === "urgent",
+    };
   }).filter(t => t.title);
+}
+
+function parseDoneTasks(raw: string | null): DoneTask[] {
+  if (!raw) return [];
+  return raw.split("\n").map(line => {
+    const parts = line.split(" | ");
+    return { title: parts[0] || "", url: parts[1] || "" };
+  }).filter(t => t.title);
+}
+
+function parseTimesheetEntries(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw.split("\n").filter(Boolean);
 }
 
 const DAY_TYPE_LABELS: Record<string, string> = {
@@ -40,39 +64,36 @@ const DAY_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 const MARKET_OPTIONS = [
-  { key: "branson", label: "Branson" },
+  { key: "branson",    label: "Branson" },
   { key: "deep_creek", label: "Deep Creek" },
-  { key: "poconos", label: "Poconos" },
+  { key: "poconos",   label: "Poconos" },
 ];
 const MARKET_LABELS: Record<string, string> = { branson: "Branson", deep_creek: "Deep Creek", poconos: "Poconos" };
 
 const OCCUPANCY_OPTIONS = [
-  { key: "vacant", label: "Vacant" },
-  { key: "checkin", label: "Check-in" },
-  { key: "checkout", label: "Check-out" },
-  { key: "turn", label: "Turn" },
+  { key: "vacant",         label: "Vacant" },
+  { key: "checkin",        label: "Check-in" },
+  { key: "checkout",       label: "Check-out" },
+  { key: "turn",           label: "Turn" },
   { key: "guest_occupied", label: "Occupied" },
   { key: "owner_occupied", label: "Owner" },
 ];
 
-// Use local date to avoid UTC shift bugs
 function localIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function isoToday() { return localIso(new Date()); }
+function isoToday()    { return localIso(new Date()); }
 function isoTomorrow() { const d = new Date(); d.setDate(d.getDate() + 1); return localIso(d); }
-function isoMax() { const d = new Date(); d.setDate(d.getDate() + 14); return localIso(d); }
+function isoMax()      { const d = new Date(); d.setDate(d.getDate() + 14); return localIso(d); }
 function fmtDate(iso: string) {
   const d = new Date(iso + "T12:00:00Z");
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-type SortKey = "property" | "market" | "open_tasks" | "urgent_count" | "avg_review" | "billable_30d";
+type SortKey = "property" | "market" | "open_tasks" | "urgent_count" | "avg_review";
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
-function MultiSelect({
-  options, selected, onChange, placeholder,
-}: {
+function MultiSelect({ options, selected, onChange, placeholder }: {
   options: { key: string; label: string }[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
@@ -105,11 +126,10 @@ function MultiSelect({
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button onClick={() => setOpen(v => !v)} style={{
-        display: "flex", alignItems: "center", gap: 6,
-        fontSize: 13, fontWeight: 500, border: "1px solid #e2e8f0", borderRadius: 6,
-        padding: "5px 10px", color: allSelected ? "#6b7280" : "#1a202c",
-        background: "#ffffff", cursor: "pointer", outline: "none", whiteSpace: "nowrap",
-        minWidth: 130,
+        display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 500,
+        border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 10px",
+        color: allSelected ? "#6b7280" : "#1a202c", background: "#ffffff",
+        cursor: "pointer", outline: "none", whiteSpace: "nowrap", minWidth: 130,
       }}>
         <span style={{ flex: 1, textAlign: "left" }}>{label}</span>
         <span style={{ fontSize: 10, color: "#9ca3af" }}>▾</span>
@@ -120,15 +140,14 @@ function MultiSelect({
           background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8,
           boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: 180, overflow: "hidden",
         }}>
-          <div style={{ borderBottom: "1px solid #f3f4f6" }}>
-            <button onClick={() => onChange(new Set())} style={{
-              width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
-              fontWeight: allSelected ? 600 : 400, color: allSelected ? "#1a202c" : "#6b7280",
-              background: allSelected ? "#f8fafc" : "transparent", border: "none", cursor: "pointer",
-            }}>
-              {placeholder} {allSelected && "✓"}
-            </button>
-          </div>
+          <button onClick={() => onChange(new Set())} style={{
+            width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
+            fontWeight: allSelected ? 600 : 400, color: allSelected ? "#1a202c" : "#6b7280",
+            background: allSelected ? "#f8fafc" : "transparent", border: "none",
+            borderBottom: "1px solid #f3f4f6", cursor: "pointer",
+          }}>
+            {placeholder} {allSelected && "✓"}
+          </button>
           {options.map(o => (
             <button key={o.key} onClick={() => toggle(o.key)} style={{
               width: "100%", padding: "8px 12px", textAlign: "left", fontSize: 12,
@@ -165,9 +184,7 @@ export default function MaintenancePage() {
 
   const [sortKey, setSortKey] = useState<SortKey>("open_tasks");
   const [sortAsc, setSortAsc] = useState(false);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  // Auth
   useEffect(() => {
     const match = document.cookie.match(/(?:^|;\s*)ops_ui=([^;]+)/);
     if (match) {
@@ -189,32 +206,25 @@ export default function MaintenancePage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Fetch when date changes
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
     setError(null);
-    setProperties(new Set()); // reset property filter on date change
+    setProperties(new Set());
     fetch(`/api/maintenance?date=${date}`)
       .then(r => r.json())
-      .then(j => {
-        if (j.error) { setError(j.error); setRows([]); }
-        else setRows(j.rows || []);
-      })
+      .then(j => { if (j.error) { setError(j.error); setRows([]); } else setRows(j.rows || []); })
       .catch(() => setError("Failed to load data"))
       .finally(() => setLoading(false));
   }, [date, currentUser]);
 
-  // Property options scoped to selected markets
   const propertyOptions = useMemo(() => {
     const filtered = markets.size === 0 ? rows : rows.filter(r => markets.has(r.market));
     return Array.from(new Set(filtered.map(r => r.property))).sort().map(n => ({ key: n, label: n }));
   }, [rows, markets]);
 
-  // Reset property selection when markets change
   useEffect(() => { setProperties(new Set()); }, [markets]);
 
-  // Filtered + sorted rows
   const displayed = useMemo(() => {
     let out = rows;
     if (markets.size > 0) out = out.filter(r => markets.has(r.market));
@@ -222,12 +232,11 @@ export default function MaintenancePage() {
     if (occupancies.size > 0) out = out.filter(r => occupancies.has(r.tomorrow));
     return [...out].sort((a, b) => {
       let av: string | number = 0, bv: string | number = 0;
-      if (sortKey === "property") { av = a.property; bv = b.property; }
-      else if (sortKey === "market") { av = a.market; bv = b.market; }
-      else if (sortKey === "open_tasks") { av = a.open_tasks; bv = b.open_tasks; }
-      else if (sortKey === "urgent_count") { av = a.urgent_count; bv = b.urgent_count; }
-      else if (sortKey === "avg_review") { av = a.avg_review ?? -1; bv = b.avg_review ?? -1; }
-      else if (sortKey === "billable_30d") { av = a.billable_30d ?? -1; bv = b.billable_30d ?? -1; }
+      if (sortKey === "property")     { av = a.property; bv = b.property; }
+      else if (sortKey === "market")  { av = a.market; bv = b.market; }
+      else if (sortKey === "open_tasks")    { av = a.open_tasks; bv = b.open_tasks; }
+      else if (sortKey === "urgent_count")  { av = a.urgent_count; bv = b.urgent_count; }
+      else if (sortKey === "avg_review")    { av = a.avg_review ?? -1; bv = b.avg_review ?? -1; }
       if (av < bv) return sortAsc ? -1 : 1;
       if (av > bv) return sortAsc ? 1 : -1;
       return a.property.localeCompare(b.property);
@@ -238,32 +247,21 @@ export default function MaintenancePage() {
     if (sortKey === k) setSortAsc(v => !v); else { setSortKey(k); setSortAsc(false); }
   }
 
-  function toggleExpand(key: string) {
-    setExpandedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  }
-
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
   }
 
   const thBase: React.CSSProperties = {
-    padding: "10px 14px", fontSize: 10, fontWeight: 600, color: "#64748b",
-    letterSpacing: "0.06em", textTransform: "uppercase", background: "#1e293b",
-    whiteSpace: "nowrap", userSelect: "none", position: "sticky", top: 0, zIndex: 2,
+    padding: "10px 14px", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em",
+    textTransform: "uppercase", background: "#1e293b", whiteSpace: "nowrap",
+    userSelect: "none", position: "sticky", top: 0, zIndex: 2, color: "#64748b",
   };
 
   function Th({ k, label, right = true }: { k: SortKey; label: string; right?: boolean }) {
     const active = sortKey === k;
     return (
-      <th onClick={() => handleSort(k)} style={{
-        ...thBase, textAlign: right ? "right" : "left", cursor: "pointer",
-        color: active ? "#ffffff" : "#64748b",
-      }}>
+      <th onClick={() => handleSort(k)} style={{ ...thBase, textAlign: right ? "right" : "left", cursor: "pointer", color: active ? "#ffffff" : "#64748b" }}>
         {label}{active ? (sortAsc ? " ↑" : " ↓") : ""}
       </th>
     );
@@ -280,24 +278,12 @@ export default function MaintenancePage() {
         <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", marginRight: 28 }}>
           <span style={{ color: "#ffffff" }}>Vistas</span> Ops
         </span>
-        <a href="/" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>
-          Cleaning
-        </a>
-        <a href="/maintenance" style={{ fontSize: 13, fontWeight: 500, color: "#ffffff", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid #ffffff" }}>
-          Maintenance
-        </a>
+        <a href="/" style={{ fontSize: 13, fontWeight: 500, color: "#94a3b8", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid transparent" }}>Cleaning</a>
+        <a href="/maintenance" style={{ fontSize: 13, fontWeight: 500, color: "#ffffff", textDecoration: "none", padding: "0 14px", height: 52, display: "flex", alignItems: "center", borderBottom: "2px solid #ffffff" }}>Maintenance</a>
         <div style={{ flex: 1 }} />
         <div ref={userMenuRef} style={{ position: "relative" }}>
-          <button onClick={() => setShowUserMenu(v => !v)} style={{
-            width: 32, height: 32, borderRadius: "50%", border: "none",
-            background: currentUser ? "#4f7c6b" : "#334155",
-            color: "#ffffff", fontWeight: 700, fontSize: 12, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {currentUser
-              ? currentUser.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase()
-              : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-            }
+          <button onClick={() => setShowUserMenu(v => !v)} style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: currentUser ? "#4f7c6b" : "#334155", color: "#ffffff", fontWeight: 700, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {currentUser ? currentUser.name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase() : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>}
           </button>
           {showUserMenu && (
             <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 200, background: "#ffffff", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", border: "1px solid #e5e7eb", zIndex: 200, overflow: "hidden" }}>
@@ -320,30 +306,20 @@ export default function MaintenancePage() {
         <MultiSelect options={OCCUPANCY_OPTIONS} selected={occupancies} onChange={setOccupancies} placeholder="All Occupancy" />
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Date</span>
-        <input
-          type="date"
-          value={date}
-          min={isoToday()}
-          max={isoMax()}
-          onChange={e => e.target.value && setDate(e.target.value)}
-          style={{ fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 10px", color: "#1a202c", background: "#ffffff", outline: "none", cursor: "pointer" }}
-        />
+        <input type="date" value={date} min={isoToday()} max={isoMax()} onChange={e => e.target.value && setDate(e.target.value)}
+          style={{ fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 10px", color: "#1a202c", background: "#ffffff", outline: "none", cursor: "pointer" }} />
         {date !== isoTomorrow() && (
-          <button onClick={() => setDate(isoTomorrow())} style={{ fontSize: 12, padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: 6, background: "transparent", color: "#64748b", cursor: "pointer" }}>
-            Tomorrow
-          </button>
+          <button onClick={() => setDate(isoTomorrow())} style={{ fontSize: 12, padding: "5px 10px", border: "1px solid #e2e8f0", borderRadius: 6, background: "transparent", color: "#64748b", cursor: "pointer" }}>Tomorrow</button>
         )}
       </div>
 
       {/* Main content */}
-      <div style={{ maxWidth: 1500, margin: "0 auto", padding: "24px 28px" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "24px 28px" }}>
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1a202c" }}>Property Maintenance</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "#6b7280" }}>
-              Open maintenance tasks by property for {fmtDate(date)}.
-            </p>
+            <p style={{ margin: "4px 0 0 0", fontSize: 13, color: "#6b7280" }}>Open maintenance tasks by property for {fmtDate(date)}.</p>
           </div>
           <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
             <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
@@ -368,18 +344,18 @@ export default function MaintenancePage() {
 
         {!loading && !error && (
           <div style={{ background: "#ffffff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-            <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
+            <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thBase, textAlign: "left", width: 200, minWidth: 160, maxWidth: 200 }}>Property</th>
+                    <Th k="property" label="Property" right={false} />
                     <th style={{ ...thBase, textAlign: "left" }}>Occupancy</th>
                     <Th k="open_tasks" label="Open" />
                     <Th k="urgent_count" label="Urgent" />
                     <Th k="avg_review" label="Avg Review" />
-                    <Th k="billable_30d" label="Hrs (30d)" />
-                    <th style={{ ...thBase, textAlign: "left", minWidth: 160 }}>Last Visit</th>
-                    <th style={{ ...thBase, textAlign: "left", width: 300, minWidth: 200, maxWidth: 300 }}>Tasks</th>
+                    <th style={{ ...thBase, textAlign: "left", minWidth: 200 }}>Timesheet App 30d</th>
+                    <th style={{ ...thBase, textAlign: "left", minWidth: 240 }}>Open Tasks</th>
+                    <th style={{ ...thBase, textAlign: "left", minWidth: 200 }}>Completed Tasks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -388,17 +364,20 @@ export default function MaintenancePage() {
                   )}
                   {displayed.map((row, i) => {
                     const key = `${row.market}:${row.property}`;
-                    const tasks = parseTasks(row.maintenance_tasks);
-                    const expanded = expandedRows.has(key);
+                    const openTasks = parseOpenTasks(row.maintenance_tasks);
+                    const doneTasks = parseDoneTasks(row.completed_tasks);
+                    const timesheetEntries = parseTimesheetEntries(row.timesheet_30d);
                     const occ = DAY_TYPE_COLORS[row.tomorrow] || { bg: "#f1f5f9", text: "#64748b" };
+                    const isDeepCreek = row.market === "deep_creek";
+
                     return (
                       <tr key={key}
-                        style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafbfc" }}
+                        style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#ffffff" : "#fafbfc", verticalAlign: "top" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "#f8faff")}
                         onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? "#ffffff" : "#fafbfc")}
                       >
-                        {/* Property — fixed width, truncate */}
-                        <td style={{ padding: "10px 14px", width: 200, maxWidth: 200 }}>
+                        {/* Property */}
+                        <td style={{ padding: "10px 14px", width: 190, maxWidth: 190 }}>
                           <div style={{ fontWeight: 600, color: "#1a202c", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.property}>{row.property}</div>
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{MARKET_LABELS[row.market] || row.market}</div>
                         </td>
@@ -410,12 +389,12 @@ export default function MaintenancePage() {
                           </span>
                         </td>
 
-                        {/* Open */}
+                        {/* Open count */}
                         <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: row.open_tasks > 0 ? "#dc2626" : "#94a3b8", fontSize: 14 }}>
                           {row.open_tasks > 0 ? row.open_tasks : "—"}
                         </td>
 
-                        {/* Urgent */}
+                        {/* Urgent count */}
                         <td style={{ padding: "10px 14px", textAlign: "right" }}>
                           {row.urgent_count > 0
                             ? <span style={{ display: "inline-block", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10 }}>{row.urgent_count} urgent</span>
@@ -427,36 +406,43 @@ export default function MaintenancePage() {
                           {row.avg_review != null ? row.avg_review.toFixed(2) : "—"}
                         </td>
 
-                        {/* Billable 30d */}
-                        <td style={{ padding: "10px 14px", textAlign: "right", color: row.billable_30d != null ? "#1a202c" : "#94a3b8", fontSize: 13 }}>
-                          {row.billable_30d != null ? `${row.billable_30d}h` : "—"}
-                        </td>
-
-                        {/* Last visit */}
-                        <td style={{ padding: "10px 14px", color: "#4b5563", fontSize: 12, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.last_visit || ""}>
-                          {row.last_visit || <span style={{ color: "#94a3b8" }}>—</span>}
-                        </td>
-
-                        {/* Tasks — fixed width, expandable */}
-                        <td style={{ padding: "10px 14px", width: 300, maxWidth: 300 }}>
-                          {tasks.length === 0
+                        {/* Timesheet 30d — Deep Creek only */}
+                        <td style={{ padding: "10px 14px", minWidth: 200 }}>
+                          {!isDeepCreek
                             ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                            : (
-                              <div>
-                                {(expanded ? tasks : tasks.slice(0, 2)).map((t, ti) => (
-                                  <div key={ti} style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: ti < (expanded ? tasks.length : Math.min(2, tasks.length)) - 1 ? 4 : 0 }}>
-                                    <span style={{ fontSize: 12, color: "#374151", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.title}>{t.title}</span>
-                                    <span style={{ fontSize: 10, color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0 }}>{t.daysOld}</span>
-                                    {t.url && <a href={t.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#3b82f6", whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>↗</a>}
-                                  </div>
-                                ))}
-                                {tasks.length > 2 && (
-                                  <button onClick={() => toggleExpand(key)} style={{ fontSize: 11, color: "#3b82f6", background: "none", border: "none", padding: "2px 0 0 0", cursor: "pointer", fontWeight: 500 }}>
-                                    {expanded ? "Show less" : `+${tasks.length - 2} more`}
-                                  </button>
-                                )}
+                            : timesheetEntries.length === 0
+                              ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                              : timesheetEntries.map((entry, ei) => (
+                                <div key={ei} style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, marginBottom: ei < timesheetEntries.length - 1 ? 4 : 0 }}>
+                                  {entry}
+                                </div>
+                              ))}
+                        </td>
+
+                        {/* Open Tasks (with warning icon + red age) */}
+                        <td style={{ padding: "10px 14px", minWidth: 240 }}>
+                          {openTasks.length === 0
+                            ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                            : openTasks.map((t, ti) => (
+                              <div key={ti} style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: ti < openTasks.length - 1 ? 5 : 0 }}>
+                                {t.urgent && <span style={{ fontSize: 12, flexShrink: 0, lineHeight: 1 }}>⚠️</span>}
+                                <span style={{ fontSize: 12, color: "#374151", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.title}>{t.title}</span>
+                                <span style={{ fontSize: 10, whiteSpace: "nowrap", flexShrink: 0, color: t.daysNum >= 7 ? "#dc2626" : "#94a3b8", fontWeight: t.daysNum >= 7 ? 600 : 400 }}>{t.daysOld}</span>
+                                {t.url && <a href={t.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#3b82f6", whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>↗</a>}
                               </div>
-                            )}
+                            ))}
+                        </td>
+
+                        {/* Completed Tasks */}
+                        <td style={{ padding: "10px 14px", minWidth: 200 }}>
+                          {doneTasks.length === 0
+                            ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                            : doneTasks.map((t, ti) => (
+                              <div key={ti} style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: ti < doneTasks.length - 1 ? 5 : 0 }}>
+                                <span style={{ fontSize: 12, color: "#374151", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.title}>{t.title}</span>
+                                {t.url && <a href={t.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: "#3b82f6", whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none" }}>↗</a>}
+                              </div>
+                            ))}
                         </td>
                       </tr>
                     );
