@@ -354,8 +354,8 @@ export default function MaintenancePage() {
                     <Th k="urgent_count" label="Urgent" />
                     <Th k="avg_review" label="Avg Review" />
                     <th style={{ ...thBase, textAlign: "left", minWidth: 200 }}>Timesheet App 30d</th>
-                    <th style={{ ...thBase, textAlign: "left", minWidth: 240 }}>Open Tasks</th>
-                    <th style={{ ...thBase, textAlign: "left", minWidth: 200 }}>Completed Tasks</th>
+                    <th style={{ ...thBase, textAlign: "left", width: 260, minWidth: 160, maxWidth: 260 }}>Open Tasks</th>
+                    <th style={{ ...thBase, textAlign: "left", width: 220, minWidth: 140, maxWidth: 220 }}>Completed Tasks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -420,7 +420,7 @@ export default function MaintenancePage() {
                         </td>
 
                         {/* Open Tasks (with warning icon + red age) */}
-                        <td style={{ padding: "10px 14px", minWidth: 240 }}>
+                        <td style={{ padding: "10px 14px", width: 260, maxWidth: 260 }}>
                           {openTasks.length === 0
                             ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                             : openTasks.map((t, ti) => (
@@ -434,7 +434,7 @@ export default function MaintenancePage() {
                         </td>
 
                         {/* Completed Tasks */}
-                        <td style={{ padding: "10px 14px", minWidth: 200 }}>
+                        <td style={{ padding: "10px 14px", width: 220, maxWidth: 220 }}>
                           {doneTasks.length === 0
                             ? <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                             : doneTasks.map((t, ti) => (
