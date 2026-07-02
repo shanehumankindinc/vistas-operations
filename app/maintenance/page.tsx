@@ -9,6 +9,7 @@ const PropertyMap = dynamic(() => import("./PropertyMap"), { ssr: false, loading
 ) });
 
 const ScheduleModal = dynamic(() => import("./ScheduleModal"), { ssr: false });
+const RoutesPanel = dynamic(() => import("./RoutesPanel"), { ssr: false });
 
 type PropertyRow = {
   market: string;
@@ -27,8 +28,8 @@ type PropertyRow = {
   completed_tasks: string | null;
 };
 
-// Open task format: "title | Xd old | url | priority"
-type OpenTask = { title: string; daysOld: string; daysNum: number; url: string; urgent: boolean };
+// Open task format: "title | Xd old | url | priority | assignee"
+type OpenTask = { title: string; daysOld: string; daysNum: number; url: string; urgent: boolean; assignee: string };
 // Completed task format: "title | url"
 type DoneTask = { title: string; url: string };
 
@@ -44,6 +45,7 @@ function parseOpenTasks(raw: string | null): OpenTask[] {
       daysNum,
       url: parts[2] || "",
       urgent: (parts[3] || "") === "urgent",
+      assignee: parts[4] || "Unassigned",
     };
   }).filter(t => t.title);
 }
@@ -263,6 +265,7 @@ export default function MaintenancePage() {
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
   const [scheduleRow, setScheduleRow] = useState<PropertyRow | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [showRoutes, setShowRoutes] = useState(false);
 
   useEffect(() => {
     const match = document.cookie.match(/(?:^|;\s*)ops_ui=([^;]+)/);
@@ -404,6 +407,18 @@ export default function MaintenancePage() {
             <span>🗺️</span> {showMap ? "Hide Map" : "Show Map"}
           </button>
         )}
+        <button
+          onClick={() => setShowRoutes(v => !v)}
+          style={{
+            fontSize: 12, fontWeight: 500, padding: "5px 10px",
+            border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer",
+            background: showRoutes ? "#1e293b" : "#ffffff",
+            color: showRoutes ? "#ffffff" : "#64748b",
+            display: "flex", alignItems: "center", gap: 5,
+          }}
+        >
+          <span>🗂️</span> Routes
+        </button>
         <span style={{ fontSize: 12, color: "#64748b", fontWeight: 500 }}>Date</span>
         <input type="date" value={date} min={isoToday()} max={isoMax()} onChange={e => e.target.value && setDate(e.target.value)}
           style={{ fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 6, padding: "5px 10px", color: "#1a202c", background: "#ffffff", outline: "none", cursor: "pointer" }} />
@@ -413,7 +428,10 @@ export default function MaintenancePage() {
       </div>
 
       {/* Main content */}
-      <div style={{ maxWidth: 1600, margin: "0 auto", padding: "24px 28px" }}>
+      <div style={{ maxWidth: 1600, margin: "0 auto", display: "flex", alignItems: "flex-start" }}>
+
+      {/* Left: map + table */}
+      <div style={{ flex: 1, minWidth: 0, padding: "24px 28px" }}>
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <div>
@@ -605,6 +623,21 @@ export default function MaintenancePage() {
             </div>
           </div>
         )}
+      </div>
+      {/* End left panel */}
+
+      {/* Right: routes panel */}
+      {showRoutes && (
+        <div style={{
+          width: "25%", minWidth: 260, maxWidth: 380, flexShrink: 0,
+          position: "sticky", top: 96, height: "calc(100vh - 96px)",
+          borderLeft: "1px solid #e2e8f0", background: "#ffffff",
+          display: "flex", flexDirection: "column",
+        }}>
+          <RoutesPanel displayed={displayed} />
+        </div>
+      )}
+
       </div>
 
       {scheduleRow && (
